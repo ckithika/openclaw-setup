@@ -1,0 +1,23 @@
+# Credentials and secrets
+*.env
+credentials/
+*.json
+!package.json
+
+# OpenClaw data
+.openclaw/
+openclaw-instances/
+backups/
+chrome-profile/
+workspace/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
