@@ -1276,18 +1276,10 @@ generate_docker_compose() {
       - |
         echo "Starting backup cron..."
         while true; do
-          # Calculate seconds until next 3 AM
-          now=\$$(date +%s)
-          target=\$$(date -d "tomorrow 03:00" +%s 2>/dev/null || date -v+1d -v3H -v0M -v0S +%s)
-          sleep_secs=\$$((target - now))
-          [ \$$sleep_secs -lt 0 ] && sleep_secs=\$$((sleep_secs + 86400))
-          echo "Next backup in \$$sleep_secs seconds..."
-          sleep \$$sleep_secs
-          # Create backup
-          backup_name="openclaw-${INSTANCE_NAME}-\$$(date +%Y%m%d-%H%M%S).tar.gz"
-          tar czf "/backups/\$$backup_name" -C /source .
-          echo "Backup created: \$$backup_name"
-          # Prune backups older than 7 days
+          sleep 86400
+          backup_name="openclaw-${INSTANCE_NAME}-\$(date +%Y%m%d-%H%M%S).tar.gz"
+          tar czf "/backups/\$backup_name" -C /source .
+          echo "Backup created: \$backup_name"
           find /backups -name "openclaw-${INSTANCE_NAME}-*.tar.gz" -mtime +7 -delete
           echo "Old backups pruned"
         done
