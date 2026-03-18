@@ -151,7 +151,7 @@ validate_token() {
 ask_yn() {
   local prompt="$1" default="${2:-y}"
   local yn_hint="[Y/n]"; [[ "$default" == "n" ]] && yn_hint="[y/N]"
-  read -rp "$(echo -e "${YELLOW}?${NC} ${prompt} ${yn_hint}: ")" answer
+  read -rp "$(echo -e "${YELLOW}?${NC} ${prompt} ${yn_hint}: ")" answer || true
   answer="${answer:-$default}"
   answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
   [[ "$answer" == "y" ]]
@@ -162,7 +162,7 @@ ask_input() {
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer
+    read -r answer || true
     answer="${answer:-$default}"
     if validate_input "$answer" "$prompt"; then
       echo "$answer"
@@ -177,7 +177,7 @@ ask_name() {
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer
+    read -r answer || true
     answer="${answer:-$default}"
     if validate_name "$answer" "$prompt"; then
       echo "$answer"
@@ -191,7 +191,7 @@ ask_port() {
   local prompt="$1" default="${2:-18789}"
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt} (default: $default): " >&2
-    read -r answer
+    read -r answer || true
     answer="${answer:-$default}"
     if validate_port "$answer"; then
       echo "$answer"
@@ -206,7 +206,7 @@ ask_path() {
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer
+    read -r answer || true
     answer="${answer:-$default}"
     if validate_path "$answer" "$prompt"; then
       echo "$answer"
@@ -219,7 +219,8 @@ ask_path() {
 ask_secret() {
   local prompt="$1" label="${2:-token}"
   echo -ne "${YELLOW}?${NC} ${prompt}: " >&2
-  read -rs answer  # -s hides input
+  local answer=""
+  read -rs answer || true  # -s hides input; || true handles EOF
   echo "" >&2
   if [[ -n "$answer" ]] && ! validate_token "$answer" "$label"; then
     echo ""
@@ -237,7 +238,7 @@ ask_choice() {
   done
   local choice
   while true; do
-    read -rp "$(echo -e "  ${YELLOW}>${NC} ")" choice
+    read -rp "$(echo -e "  ${YELLOW}>${NC} ")" choice || true
     choice="${choice:-1}"
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
       echo "${options[$((choice-1))]}"
@@ -294,6 +295,9 @@ MODEL_FALLBACK=""
 # API credentials
 ANTHROPIC_API_KEY=""
 OPENAI_API_KEY=""
+OPENROUTER_API_KEY=""
+GOOGLE_API_KEY=""
+GROQ_API_KEY=""
 
 # Backup
 FEAT_BACKUP=false
@@ -566,7 +570,7 @@ toggle_features() {
     printf "  ${status_color}[%s]${NC} %s" "$status_icon" "$description"
 
     local toggle
-    read -rp " (toggle? y/N): " toggle
+    read -rp " (toggle? y/N): " toggle || true
     toggle=$(echo "$toggle" | tr '[:upper:]' '[:lower:]')
     if [[ "$toggle" == "y" ]]; then
       if [[ "$current_val" == "true" ]]; then
@@ -723,12 +727,19 @@ setup_models() {
   echo -e "  ${BOLD}ollama-local${NC}   — Local models on this machine (limited by 16GB RAM)"
   echo -e "  ${BOLD}anthropic${NC}      — Claude API (paid, best quality)"
   echo -e "  ${BOLD}openai${NC}         — OpenAI GPT API (paid)"
+  echo -e "  ${BOLD}openrouter${NC}     — OpenRouter (100+ models, one API key)"
+  echo -e "  ${BOLD}google${NC}         — Google Gemini API"
+  echo -e "  ${BOLD}groq${NC}           — Groq (fastest inference, free tier)"
   echo ""
   MODEL_PROVIDER=$(ask_choice "Select primary model provider:" \
-    "ollama-cloud" "ollama-local" "anthropic" "openai")
+    "ollama-cloud" "ollama-local" "anthropic" "openai" "openrouter" "google" "groq")
 
   case "$MODEL_PROVIDER" in
     ollama-cloud)
+      echo ""
+      echo -e "  ${CYAN}Ollama cloud models run remotely via Ollama's infrastructure.${NC}"
+      echo -e "  ${CYAN}No API key needed. Requires Ollama 0.17+ installed and running.${NC}"
+      echo -e "  ${CYAN}Models are accessed through your local Ollama with the :cloud tag.${NC}"
       echo ""
       echo -e "  ${BOLD}1)${NC} glm-5:cloud        — Best coding (SWE-bench 77.8%)"
       echo -e "  ${BOLD}2)${NC} kimi-k2.5:cloud    — Best multimodal + vision"
@@ -744,16 +755,60 @@ setup_models() {
         done
         MODEL_FALLBACK=$(ask_choice "Select fallback model:" "${remaining[@]}")
       fi
-      info "Ollama cloud models require no API key — free via Ollama"
+
+      # Verify Ollama version supports :cloud
+      if command -v ollama &>/dev/null || [[ -x /usr/local/bin/ollama ]]; then
+        local ollama_bin="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo /usr/local/bin/ollama)}"
+        local ollama_ver
+        ollama_ver=$("$ollama_bin" --version 2>/dev/null | awk '{print $NF}') || ollama_ver="0.0.0"
+        local major minor
+        major=$(echo "$ollama_ver" | cut -d. -f1)
+        minor=$(echo "$ollama_ver" | cut -d. -f2)
+        if (( major == 0 && minor < 17 )); then
+          warn "Ollama v${ollama_ver} detected — cloud models require v0.17+. Run: ollama update"
+        else
+          success "Ollama v${ollama_ver} supports cloud models"
+        fi
+      fi
+
+      if ask_yn "Use custom Ollama host?" "n"; then
+        OLLAMA_HOST=$(ask_input "Ollama host URL" "http://localhost:11434")
+      fi
+
+      info "No API key needed — Ollama cloud models are free"
       ;;
 
     ollama-local)
-      MODEL_PRIMARY=$(ask_input "Model name (e.g., devstral-small-2, nemotron-3-nano)" "devstral-small-2")
+      echo ""
+      echo -e "  ${CYAN}Local models run entirely on this machine using Ollama.${NC}"
+      echo -e "  ${CYAN}Limited by available RAM (16GB = up to ~14B parameter models).${NC}"
+      echo ""
+      echo -e "  ${BOLD}Recommended for 16GB:${NC}"
+      echo -e "    devstral-small-2  — 24B, best for agentic coding (tight fit)"
+      echo -e "    nemotron-3-nano   — 30B MoE/6B active, fast"
+      echo -e "    qwen3.5:14b       — 14B, strong all-rounder"
+      echo -e "    deepseek-r1:8b    — 8B, smooth on 16GB"
+      echo ""
+      MODEL_PRIMARY=$(ask_input "Model name" "devstral-small-2")
       info "Make sure to pull the model: ollama pull ${MODEL_PRIMARY}"
+
+      if ask_yn "Use custom Ollama host?" "n"; then
+        OLLAMA_HOST=$(ask_input "Ollama host URL" "http://localhost:11434")
+      fi
       ;;
 
     anthropic)
-      MODEL_PRIMARY=$(ask_input "Model ID" "claude-sonnet-4-5")
+      echo ""
+      echo -e "  ${CYAN}Claude API — best quality, paid per token.${NC}"
+      echo -e "  ${CYAN}Supported models: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5${NC}"
+      echo ""
+      echo -e "  ${BOLD}1)${NC} claude-sonnet-4-6   — Best balance of quality and speed"
+      echo -e "  ${BOLD}2)${NC} claude-opus-4-6     — Highest quality, slower"
+      echo -e "  ${BOLD}3)${NC} claude-haiku-4-5    — Fastest, cheapest"
+      echo ""
+      MODEL_PRIMARY=$(ask_choice "Select Claude model:" \
+        "claude-sonnet-4-6" "claude-opus-4-6" "claude-haiku-4-5")
+
       echo ""
       echo -e "  ${CYAN}Get your API key at: https://console.anthropic.com/settings/keys${NC}"
       local api_key
@@ -763,11 +818,22 @@ setup_models() {
         success "  Anthropic API key saved"
       else
         warn "  Skipped — add key later: openclaw models auth add anthropic"
+        warn "  OpenClaw will NOT work without an API key for Anthropic"
       fi
       ;;
 
     openai)
-      MODEL_PRIMARY=$(ask_input "Model ID" "gpt-5.4")
+      echo ""
+      echo -e "  ${CYAN}OpenAI API — paid per token.${NC}"
+      echo -e "  ${CYAN}Supported models: gpt-5.4, gpt-5-mini, gpt-4o${NC}"
+      echo ""
+      echo -e "  ${BOLD}1)${NC} gpt-5.4     — Latest, most capable"
+      echo -e "  ${BOLD}2)${NC} gpt-5-mini  — Faster, cheaper"
+      echo -e "  ${BOLD}3)${NC} gpt-4o      — Previous gen, stable"
+      echo ""
+      MODEL_PRIMARY=$(ask_choice "Select OpenAI model:" \
+        "gpt-5.4" "gpt-5-mini" "gpt-4o")
+
       echo ""
       echo -e "  ${CYAN}Get your API key at: https://platform.openai.com/api-keys${NC}"
       local api_key
@@ -777,12 +843,94 @@ setup_models() {
         success "  OpenAI API key saved"
       else
         warn "  Skipped — add key later: openclaw models auth add openai"
+        warn "  OpenClaw will NOT work without an API key for OpenAI"
+      fi
+      ;;
+
+    openrouter)
+      echo ""
+      echo -e "  ${CYAN}OpenRouter — access 100+ models with one API key.${NC}"
+      echo -e "  ${CYAN}Supports Claude, GPT, Gemini, Llama, Mistral, and more.${NC}"
+      echo -e "  ${CYAN}Some models have free tiers. Pay-as-you-go.${NC}"
+      echo ""
+      echo -e "  ${BOLD}1)${NC} anthropic/claude-sonnet-4-6   — Claude Sonnet via OpenRouter"
+      echo -e "  ${BOLD}2)${NC} openai/gpt-5.4               — GPT-5.4 via OpenRouter"
+      echo -e "  ${BOLD}3)${NC} google/gemini-3.1-pro         — Gemini Pro via OpenRouter"
+      echo -e "  ${BOLD}4)${NC} meta-llama/llama-4-scout      — Llama 4 (free tier)"
+      echo -e "  ${BOLD}5)${NC} mistralai/devstral-2          — Devstral 2 (free tier)"
+      echo ""
+      MODEL_PRIMARY=$(ask_choice "Select model:" \
+        "anthropic/claude-sonnet-4-6" "openai/gpt-5.4" "google/gemini-3.1-pro" \
+        "meta-llama/llama-4-scout" "mistralai/devstral-2")
+
+      echo ""
+      echo -e "  ${CYAN}Get your API key at: https://openrouter.ai/keys${NC}"
+      local api_key
+      api_key=$(ask_secret "  Paste OpenRouter API key sk-or-... (or Enter to skip)" "OpenRouter API key")
+      if [[ -n "$api_key" ]]; then
+        OPENROUTER_API_KEY="$api_key"
+        success "  OpenRouter API key saved"
+      else
+        warn "  Skipped — add key later in credentials/openrouter.json"
+        warn "  OpenClaw will NOT work without an API key for OpenRouter"
+      fi
+      ;;
+
+    google)
+      echo ""
+      echo -e "  ${CYAN}Google Gemini API — competitive pricing, large context.${NC}"
+      echo -e "  ${CYAN}Free tier available for some models.${NC}"
+      echo ""
+      echo -e "  ${BOLD}1)${NC} gemini-3.1-pro-preview  — Latest, most capable"
+      echo -e "  ${BOLD}2)${NC} gemini-3.1-flash        — Fast, efficient"
+      echo -e "  ${BOLD}3)${NC} gemini-2.5-pro          — Previous gen, stable"
+      echo ""
+      MODEL_PRIMARY=$(ask_choice "Select Gemini model:" \
+        "gemini-3.1-pro-preview" "gemini-3.1-flash" "gemini-2.5-pro")
+
+      echo ""
+      echo -e "  ${CYAN}Get your API key at: https://aistudio.google.com/apikey${NC}"
+      local api_key
+      api_key=$(ask_secret "  Paste Google AI API key (or Enter to skip)" "Google API key")
+      if [[ -n "$api_key" ]]; then
+        GOOGLE_API_KEY="$api_key"
+        success "  Google API key saved"
+      else
+        warn "  Skipped — add key later in credentials/google.json"
+        warn "  OpenClaw will NOT work without an API key for Google"
+      fi
+      ;;
+
+    groq)
+      echo ""
+      echo -e "  ${CYAN}Groq — fastest inference speeds, free tier available.${NC}"
+      echo -e "  ${CYAN}Runs open-source models on custom LPU hardware.${NC}"
+      echo ""
+      echo -e "  ${BOLD}1)${NC} llama-4-scout-17b-16e  — Llama 4 Scout (free)"
+      echo -e "  ${BOLD}2)${NC} deepseek-r1-distill-llama-70b — DeepSeek R1 70B"
+      echo -e "  ${BOLD}3)${NC} qwen-qwq-32b          — Qwen QwQ 32B (free)"
+      echo ""
+      MODEL_PRIMARY=$(ask_choice "Select Groq model:" \
+        "llama-4-scout-17b-16e" "deepseek-r1-distill-llama-70b" "qwen-qwq-32b")
+
+      echo ""
+      echo -e "  ${CYAN}Get your API key at: https://console.groq.com/keys${NC}"
+      local api_key
+      api_key=$(ask_secret "  Paste Groq API key gsk_... (or Enter to skip)" "Groq API key")
+      if [[ -n "$api_key" ]]; then
+        GROQ_API_KEY="$api_key"
+        success "  Groq API key saved"
+      else
+        warn "  Skipped — add key later in credentials/groq.json"
+        warn "  OpenClaw will NOT work without an API key for Groq"
       fi
       ;;
   esac
 
   success "Primary model: $MODEL_PRIMARY"
-  [[ -n "$MODEL_FALLBACK" ]] && success "Fallback model: $MODEL_FALLBACK"
+  if [[ -n "$MODEL_FALLBACK" ]]; then
+    success "Fallback model: $MODEL_FALLBACK"
+  fi
 }
 
 # ── Generate openclaw.json ───────────────────────────────────────────────────
@@ -879,7 +1027,32 @@ MODELS
       agents_model="ollama/${MODEL_PRIMARY}"
       ;;
     anthropic)
-      models_block='"providers": {}'
+      # Anthropic uses built-in provider — set context windows per model
+      local ctx_window=200000 max_tokens=8192
+      case "$MODEL_PRIMARY" in
+        claude-opus-4-6)   ctx_window=1000000; max_tokens=32768 ;;
+        claude-sonnet-4-6) ctx_window=200000;  max_tokens=16384 ;;
+        claude-haiku-4-5)  ctx_window=200000;  max_tokens=8192 ;;
+      esac
+      models_block=$(cat <<MODELS
+    "providers": {
+      "anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "${MODEL_PRIMARY}",
+            "name": "${MODEL_PRIMARY}",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": ${ctx_window},
+            "maxTokens": ${max_tokens}
+          }
+        ]
+      }
+    }
+MODELS
+)
       auth_block=$(cat <<AUTH
   "auth": {
     "profiles": {
@@ -895,7 +1068,30 @@ AUTH
       agents_model="anthropic/${MODEL_PRIMARY}"
       ;;
     openai)
-      models_block='"providers": {}'
+      local ctx_window=128000 max_tokens=16384
+      case "$MODEL_PRIMARY" in
+        gpt-5.4)    ctx_window=200000; max_tokens=32768 ;;
+        gpt-5-mini) ctx_window=128000; max_tokens=16384 ;;
+        gpt-4o)     ctx_window=128000; max_tokens=16384 ;;
+      esac
+      models_block=$(cat <<MODELS
+    "providers": {
+      "openai": {
+        "baseUrl": "https://api.openai.com/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "${MODEL_PRIMARY}",
+            "name": "${MODEL_PRIMARY}",
+            "input": ["text", "image"],
+            "contextWindow": ${ctx_window},
+            "maxTokens": ${max_tokens}
+          }
+        ]
+      }
+    }
+MODELS
+)
       auth_block=$(cat <<AUTH
   "auth": {
     "profiles": {
@@ -909,6 +1105,108 @@ AUTH
 AUTH
 )
       agents_model="openai/${MODEL_PRIMARY}"
+      ;;
+    openrouter)
+      models_block=$(cat <<MODELS
+    "providers": {
+      "openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "${MODEL_PRIMARY}",
+            "name": "${MODEL_PRIMARY}",
+            "contextWindow": 200000,
+            "maxTokens": 16384
+          }
+        ]
+      }
+    }
+MODELS
+)
+      auth_block=$(cat <<AUTH
+  "auth": {
+    "profiles": {
+      "openrouter": {
+        "provider": "openrouter",
+        "credentialFile": "openrouter.json"
+      }
+    },
+    "order": ["openrouter"]
+  },
+AUTH
+)
+      agents_model="openrouter/${MODEL_PRIMARY}"
+      ;;
+    google)
+      local ctx_window=1000000
+      case "$MODEL_PRIMARY" in
+        gemini-3.1-flash) ctx_window=1000000 ;;
+        gemini-2.5-pro)   ctx_window=1000000 ;;
+      esac
+      models_block=$(cat <<MODELS
+    "providers": {
+      "google": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+        "api": "google-generative-ai",
+        "models": [
+          {
+            "id": "${MODEL_PRIMARY}",
+            "name": "${MODEL_PRIMARY}",
+            "input": ["text", "image", "video"],
+            "contextWindow": ${ctx_window},
+            "maxTokens": 16384
+          }
+        ]
+      }
+    }
+MODELS
+)
+      auth_block=$(cat <<AUTH
+  "auth": {
+    "profiles": {
+      "google": {
+        "provider": "google",
+        "credentialFile": "google.json"
+      }
+    },
+    "order": ["google"]
+  },
+AUTH
+)
+      agents_model="google/${MODEL_PRIMARY}"
+      ;;
+    groq)
+      models_block=$(cat <<MODELS
+    "providers": {
+      "groq": {
+        "baseUrl": "https://api.groq.com/openai/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "${MODEL_PRIMARY}",
+            "name": "${MODEL_PRIMARY}",
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+MODELS
+)
+      auth_block=$(cat <<AUTH
+  "auth": {
+    "profiles": {
+      "groq": {
+        "provider": "groq",
+        "credentialFile": "groq.json"
+      }
+    },
+    "order": ["groq"]
+  },
+AUTH
+)
+      agents_model="groq/${MODEL_PRIMARY}"
       ;;
   esac
 
@@ -1227,6 +1525,24 @@ except json.JSONDecodeError as e:
     echo "{\"apiKey\": \"${OPENAI_API_KEY}\"}" > "${CONFIG_DIR}/credentials/openai.json"
     chmod 600 "${CONFIG_DIR}/credentials/openai.json"
     success "OpenAI credentials written (chmod 600)"
+  fi
+
+  if [[ -n "$OPENROUTER_API_KEY" ]]; then
+    echo "{\"apiKey\": \"${OPENROUTER_API_KEY}\"}" > "${CONFIG_DIR}/credentials/openrouter.json"
+    chmod 600 "${CONFIG_DIR}/credentials/openrouter.json"
+    success "OpenRouter credentials written (chmod 600)"
+  fi
+
+  if [[ -n "$GOOGLE_API_KEY" ]]; then
+    echo "{\"apiKey\": \"${GOOGLE_API_KEY}\"}" > "${CONFIG_DIR}/credentials/google.json"
+    chmod 600 "${CONFIG_DIR}/credentials/google.json"
+    success "Google credentials written (chmod 600)"
+  fi
+
+  if [[ -n "$GROQ_API_KEY" ]]; then
+    echo "{\"apiKey\": \"${GROQ_API_KEY}\"}" > "${CONFIG_DIR}/credentials/groq.json"
+    chmod 600 "${CONFIG_DIR}/credentials/groq.json"
+    success "Groq credentials written (chmod 600)"
   fi
 
   # Create workspace README
@@ -1626,7 +1942,9 @@ print_summary() {
   echo -e "${BOLD}Config:${NC}       ${CONFIG_DIR}/openclaw.json"
   echo -e "${BOLD}Workspace:${NC}    $WORKSPACE_DIR"
   echo -e "${BOLD}Model:${NC}        $MODEL_PRIMARY"
-  [[ -n "$MODEL_FALLBACK" ]] && echo -e "${BOLD}Fallback:${NC}     $MODEL_FALLBACK"
+  if [[ -n "$MODEL_FALLBACK" ]]; then
+    echo -e "${BOLD}Fallback:${NC}     $MODEL_FALLBACK"
+  fi
   echo -e "${BOLD}Gateway:${NC}      http://localhost:${GATEWAY_PORT}"
   echo ""
 
@@ -1673,8 +1991,11 @@ print_summary() {
 
   echo ""
   echo -e "${BOLD}Credentials:${NC}"
-  [[ -n "$ANTHROPIC_API_KEY" ]] && echo -e "  ${GREEN}[OK]${NC}  Anthropic API key stored"
-  [[ -n "$OPENAI_API_KEY" ]]    && echo -e "  ${GREEN}[OK]${NC}  OpenAI API key stored"
+  [[ -n "$ANTHROPIC_API_KEY" ]]  && echo -e "  ${GREEN}[OK]${NC}  Anthropic API key stored"
+  [[ -n "$OPENAI_API_KEY" ]]     && echo -e "  ${GREEN}[OK]${NC}  OpenAI API key stored"
+  [[ -n "$OPENROUTER_API_KEY" ]] && echo -e "  ${GREEN}[OK]${NC}  OpenRouter API key stored"
+  [[ -n "$GOOGLE_API_KEY" ]]     && echo -e "  ${GREEN}[OK]${NC}  Google API key stored"
+  [[ -n "$GROQ_API_KEY" ]]       && echo -e "  ${GREEN}[OK]${NC}  Groq API key stored"
   [[ "$MODEL_PROVIDER" == "ollama-cloud" || "$MODEL_PROVIDER" == "ollama-local" ]] && echo -e "  ${GREEN}[OK]${NC}  Ollama (no key needed)"
   echo ""
 
