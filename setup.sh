@@ -160,10 +160,15 @@ ask_yn() {
 ask_input() {
   local prompt="$1" default="${2:-}"
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
+  local _eof=false
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer || true
+    read -r answer || _eof=true
     answer="${answer:-$default}"
+    if [[ "$_eof" == "true" && -z "$answer" ]]; then
+      echo "$default"
+      return
+    fi
     if validate_input "$answer" "$prompt"; then
       echo "$answer"
       return
@@ -175,10 +180,12 @@ ask_input() {
 ask_name() {
   local prompt="$1" default="${2:-}"
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
+  local _eof=false
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer || true
+    read -r answer || _eof=true
     answer="${answer:-$default}"
+    if [[ "$_eof" == "true" && -z "$answer" ]]; then echo "$default"; return; fi
     if validate_name "$answer" "$prompt"; then
       echo "$answer"
       return
@@ -189,10 +196,12 @@ ask_name() {
 
 ask_port() {
   local prompt="$1" default="${2:-18789}"
+  local _eof=false
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt} (default: $default): " >&2
-    read -r answer || true
+    read -r answer || _eof=true
     answer="${answer:-$default}"
+    if [[ "$_eof" == "true" ]]; then echo "$default"; return; fi
     if validate_port "$answer"; then
       echo "$answer"
       return
@@ -204,10 +213,12 @@ ask_port() {
 ask_path() {
   local prompt="$1" default="${2:-}"
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
+  local _eof=false
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer || true
+    read -r answer || _eof=true
     answer="${answer:-$default}"
+    if [[ "$_eof" == "true" && -z "$answer" ]]; then echo "$default"; return; fi
     if validate_path "$answer" "$prompt"; then
       echo "$answer"
       return
@@ -271,6 +282,12 @@ FEAT_SHELL_EXEC=true
 FEAT_MESSAGING=true
 FEAT_VOICE=false
 FEAT_CLAUDE_CODE=false
+FEAT_GOOGLE_WORKSPACE=false
+
+# Google Workspace config
+GOOGLE_WS_METHOD=""          # gog | mcp | oauth
+GOOGLE_WS_SERVICES=()
+GOOGLE_WS_EMAIL=""
 
 # Channel toggles
 CH_WHATSAPP=false
@@ -559,6 +576,7 @@ toggle_features() {
     "FEAT_MESSAGING:Cross-session messaging:$FEAT_MESSAGING"
     "FEAT_VOICE:Voice/TTS (macOS native only):$FEAT_VOICE"
     "FEAT_CLAUDE_CODE:Claude Code integration (ACP):$FEAT_CLAUDE_CODE"
+    "FEAT_GOOGLE_WORKSPACE:Google Workspace (Gmail, Calendar, Drive):$FEAT_GOOGLE_WORKSPACE"
   )
 
   for feat_line in "${features[@]}"; do
@@ -931,6 +949,239 @@ setup_models() {
   if [[ -n "$MODEL_FALLBACK" ]]; then
     success "Fallback model: $MODEL_FALLBACK"
   fi
+}
+
+# ── Google Workspace Setup ───────────────────────────────────────────────────
+setup_google_workspace() {
+  [[ "$FEAT_GOOGLE_WORKSPACE" != "true" ]] && return
+
+  header "Google Workspace Integration"
+
+  echo -e "  Connect OpenClaw to Gmail, Calendar, Drive, Contacts, and more.\n"
+  echo -e "  ${BOLD}Integration methods:${NC}"
+  echo -e "  ${BOLD}gog${NC}       — gogcli tool. Full control: Gmail, Calendar, Drive, Contacts,"
+  echo -e "              Tasks, Sheets, Docs. OAuth via CLI. Best for power users."
+  echo -e "  ${BOLD}mcp${NC}       — Google Workspace MCP. Zero Cloud Console setup. OAuth via"
+  echo -e "              browser sign-in. Easiest option."
+  echo -e "  ${BOLD}oauth${NC}     — Full custom OAuth via Google Cloud Console. Most control,"
+  echo -e "              custom scopes. Best for Workspace admin accounts."
+  echo ""
+
+  GOOGLE_WS_METHOD=$(ask_choice "Select integration method:" "gog" "mcp" "oauth")
+  success "Method: $GOOGLE_WS_METHOD"
+
+  # ── Google account ──
+  echo ""
+  echo -e "  ${CYAN}Security recommendation:${NC} Use a ${BOLD}dedicated Google account${NC},"
+  echo -e "  not your personal one. This isolates OpenClaw from your main data."
+  echo ""
+
+  GOOGLE_WS_EMAIL=$(ask_input "Google account email for this instance" "")
+
+  # ── Service selection (gog and oauth methods) ──
+  if [[ "$GOOGLE_WS_METHOD" == "gog" || "$GOOGLE_WS_METHOD" == "oauth" ]]; then
+    echo ""
+    echo -e "  ${BOLD}Select Google services to enable:${NC}"
+
+    local services=(
+      "gmail:Gmail (read, send, manage email)"
+      "calendar:Google Calendar (events, scheduling)"
+      "drive:Google Drive (files, folders)"
+      "contacts:Google Contacts"
+      "tasks:Google Tasks"
+      "sheets:Google Sheets (read, write spreadsheets)"
+      "docs:Google Docs (read, export documents)"
+    )
+
+    GOOGLE_WS_SERVICES=()
+    for svc_line in "${services[@]}"; do
+      IFS=':' read -r svc_id svc_desc <<< "$svc_line"
+      # Default gmail, calendar, drive to yes
+      local default="n"
+      case "$svc_id" in
+        gmail|calendar|drive) default="y" ;;
+      esac
+      if ask_yn "  $svc_desc" "$default"; then
+        GOOGLE_WS_SERVICES+=("$svc_id")
+      fi
+    done
+
+    if [[ ${#GOOGLE_WS_SERVICES[@]} -eq 0 ]]; then
+      warn "No services selected — Google Workspace integration will be skipped"
+      FEAT_GOOGLE_WORKSPACE=false
+      return
+    fi
+
+    success "Services: ${GOOGLE_WS_SERVICES[*]}"
+  fi
+
+  # ── OAuth credentials (oauth method only) ──
+  if [[ "$GOOGLE_WS_METHOD" == "oauth" ]]; then
+    echo ""
+    echo -e "  ${CYAN}Full OAuth Setup:${NC}"
+    echo -e "  1. Go to https://console.cloud.google.com"
+    echo -e "  2. Create a new project (or select existing)"
+    echo -e "  3. Enable APIs: Gmail API, Calendar API, Drive API, etc."
+    echo -e "  4. Configure OAuth consent screen (External or Internal)"
+    echo -e "  5. Create OAuth 2.0 Client ID (type: Desktop app)"
+    echo -e "  6. Download the credentials JSON file"
+    echo ""
+
+    local creds_path
+    creds_path=$(ask_input "Path to OAuth credentials JSON (or Enter to skip)" "")
+    if [[ -n "$creds_path" && -f "$creds_path" ]]; then
+      # Validate it looks like a Google OAuth JSON
+      if python3 -c "import json; c=json.load(open('$creds_path')); assert 'installed' in c or 'web' in c" 2>/dev/null; then
+        mkdir -p "${CONFIG_DIR}/credentials"
+        cp "$creds_path" "${CONFIG_DIR}/credentials/google-oauth.json"
+        chmod 600 "${CONFIG_DIR}/credentials/google-oauth.json"
+        success "Google OAuth credentials copied to ${CONFIG_DIR}/credentials/google-oauth.json"
+      else
+        warn "File doesn't look like a Google OAuth credentials JSON — skipped"
+      fi
+    else
+      info "Skipped — add OAuth credentials later"
+    fi
+  fi
+
+  echo ""
+  success "Google Workspace configured ($GOOGLE_WS_METHOD method)"
+}
+
+# ── Google Workspace Post-Setup (skill install + auth) ───────────────────────
+run_google_workspace_setup() {
+  [[ "$FEAT_GOOGLE_WORKSPACE" != "true" ]] && return
+
+  header "Google Workspace Skill Installation"
+
+  local openclaw_cmd="openclaw"
+  local gog_cmd="gog"
+  local run_prefix=""
+
+  if [[ "$DEPLOY_MODE" == "docker" ]]; then
+    local docker_bin="${DOCKER_BIN:-$(command -v docker 2>/dev/null || echo /usr/local/bin/docker)}"
+    run_prefix="$docker_bin compose -f ${INSTANCE_DIR}/docker-compose.yml exec openclaw-${INSTANCE_NAME}"
+    openclaw_cmd="$run_prefix openclaw"
+    gog_cmd="$run_prefix gog"
+  fi
+
+  case "$GOOGLE_WS_METHOD" in
+    gog)
+      echo -e "  ${BOLD}Installing gogcli + gog skill...${NC}"
+      echo ""
+
+      if [[ "$DEPLOY_MODE" == "native" ]]; then
+        # Install gogcli via Homebrew
+        if ! command -v gog &>/dev/null; then
+          if ask_yn "Install gogcli via Homebrew?" "y"; then
+            info "Installing gogcli..."
+            brew install steipete/tap/gogcli 2>/dev/null && success "gogcli installed" || warn "gogcli install failed — install manually: brew install steipete/tap/gogcli"
+          fi
+        else
+          success "gogcli already installed"
+        fi
+
+        # Install gog skill
+        if ask_yn "Install gog skill for OpenClaw?" "y"; then
+          if command -v openclaw &>/dev/null; then
+            openclaw skills install gog 2>/dev/null && success "gog skill installed" || warn "Skill install failed — run later: openclaw skills install gog"
+          else
+            warn "OpenClaw not installed yet — install gog skill later: openclaw skills install gog"
+          fi
+        fi
+
+        # Run OAuth login
+        if [[ -n "$GOOGLE_WS_EMAIL" ]]; then
+          local svc_list
+          svc_list=$(IFS=,; echo "${GOOGLE_WS_SERVICES[*]}")
+          echo ""
+          echo -e "  ${BOLD}Google OAuth login:${NC}"
+          echo -e "  A browser will open for you to sign in with: ${CYAN}${GOOGLE_WS_EMAIL}${NC}"
+          echo -e "  Services: ${svc_list}"
+          echo ""
+
+          if ask_yn "Run Google OAuth login now?" "y"; then
+            info "Starting OAuth flow..."
+            gog auth add "$GOOGLE_WS_EMAIL" --services "$svc_list" 2>/dev/null \
+              && success "Google OAuth login complete" \
+              || warn "OAuth login failed — retry later: gog auth add $GOOGLE_WS_EMAIL --services $svc_list"
+          else
+            info "Skipped — run later:"
+            echo "  gog auth add $GOOGLE_WS_EMAIL --services $svc_list"
+          fi
+        fi
+      else
+        # Docker mode
+        echo -e "  ${CYAN}Docker mode: Google services will be set up after the container starts.${NC}"
+        echo ""
+        echo -e "  After starting the container, run:"
+        echo -e "  ${BOLD}1. Install gogcli in container:${NC}"
+        echo "     $run_prefix sh -c 'npm install -g @anthropic-ai/gogcli'"
+        echo ""
+        echo -e "  ${BOLD}2. Install gog skill:${NC}"
+        echo "     $openclaw_cmd skills install gog"
+        echo ""
+        if [[ -n "$GOOGLE_WS_EMAIL" ]]; then
+          local svc_list
+          svc_list=$(IFS=,; echo "${GOOGLE_WS_SERVICES[*]}")
+          echo -e "  ${BOLD}3. Run OAuth login (with SSH tunnel for headless):${NC}"
+          echo "     $gog_cmd auth add $GOOGLE_WS_EMAIL --services $svc_list --manual"
+          echo ""
+          echo -e "  ${CYAN}Note: --manual flag prints a URL to paste in your local browser${NC}"
+          echo -e "  ${CYAN}since Docker containers don't have a GUI browser.${NC}"
+        fi
+        echo ""
+      fi
+      ;;
+
+    mcp)
+      echo -e "  ${BOLD}Google Workspace MCP — zero Cloud Console setup${NC}"
+      echo ""
+
+      if [[ "$DEPLOY_MODE" == "native" ]]; then
+        if ask_yn "Install google-workspace-mcp skill?" "y"; then
+          if command -v openclaw &>/dev/null; then
+            openclaw skills install google-workspace-mcp 2>/dev/null \
+              && success "google-workspace-mcp skill installed" \
+              || warn "Skill install failed — run later: openclaw skills install google-workspace-mcp"
+          else
+            warn "OpenClaw not installed yet — install later: openclaw skills install google-workspace-mcp"
+          fi
+        fi
+        echo ""
+        echo -e "  ${CYAN}After starting OpenClaw, the MCP skill will prompt you to sign in${NC}"
+        echo -e "  ${CYAN}with your Google account via browser. No Cloud Console needed.${NC}"
+      else
+        echo -e "  After starting the container, run:"
+        echo "     $openclaw_cmd skills install google-workspace-mcp"
+        echo ""
+        echo -e "  ${CYAN}The MCP skill handles OAuth via browser — for Docker, use${NC}"
+        echo -e "  ${CYAN}the noVNC interface or the Control UI to complete sign-in.${NC}"
+      fi
+      echo ""
+      ;;
+
+    oauth)
+      echo -e "  ${BOLD}Custom OAuth — credentials managed via config${NC}"
+      echo ""
+      if [[ -f "${CONFIG_DIR}/credentials/google-oauth.json" ]]; then
+        success "OAuth credentials file is in place"
+        echo -e "  ${CYAN}After starting OpenClaw, run the OAuth flow:${NC}"
+        if [[ "$DEPLOY_MODE" == "native" ]]; then
+          echo "  openclaw integrations google login"
+        else
+          echo "  $openclaw_cmd integrations google login"
+        fi
+      else
+        warn "No OAuth credentials file found"
+        echo -e "  ${CYAN}Add your Google OAuth credentials JSON to:${NC}"
+        echo "  ${CONFIG_DIR}/credentials/google-oauth.json"
+      fi
+      echo ""
+      ;;
+  esac
+
+  success "Google Workspace setup guidance complete"
 }
 
 # ── Generate openclaw.json ───────────────────────────────────────────────────
@@ -1572,6 +1823,13 @@ generate_docker_compose() {
     chrome_volume="      - ${INSTANCE_DIR}/chrome-profile:/home/node/.config/chromium"
   fi
 
+  # Google Workspace volume (persist OAuth tokens)
+  local gog_volume=""
+  if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
+    mkdir -p "${INSTANCE_DIR}/google-credentials"
+    gog_volume="      - ${INSTANCE_DIR}/google-credentials:/home/node/.config/gogcli"
+  fi
+
   # Ask about backup
   local backup_service=""
   if ask_yn "Enable daily backups (3 AM, keeps 7 days)?" "y"; then
@@ -1649,6 +1907,7 @@ $( [[ -z "$network_mode" ]] && echo "    ports:" && echo "      - \"${GATEWAY_PO
       - ${CONFIG_DIR}:/home/node/.openclaw
       - ${WORKSPACE_DIR}:/home/node/openclaw/workspace
 ${chrome_volume}
+${gog_volume}
     environment:
       - OLLAMA_HOST=${OLLAMA_HOST}
       - OPENCLAW_GATEWAY_BIND=0.0.0.0
@@ -1956,6 +2215,7 @@ print_summary() {
     "FEAT_FILE_ACCESS:File Access" "FEAT_SHELL_EXEC:Shell Exec"
     "FEAT_MESSAGING:Messaging" "FEAT_VOICE:Voice" "FEAT_CLAUDE_CODE:Claude Code"
     "FEAT_BACKUP:Backup"
+    "FEAT_GOOGLE_WORKSPACE:Google Workspace"
   )
   for f in "${feats[@]}"; do
     IFS=':' read -r var label <<< "$f"
@@ -2014,6 +2274,18 @@ print_summary() {
     echo "  5. Open UI:        http://localhost:${GATEWAY_PORT}"
     [[ "$CH_WHATSAPP" == "true" ]] && echo "  6. WhatsApp pair:  docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
   fi
+  if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
+    echo ""
+    echo -e "${BOLD}Google Workspace:${NC}"
+    echo -e "  Method:   $GOOGLE_WS_METHOD"
+    if [[ -n "$GOOGLE_WS_EMAIL" ]]; then
+      echo -e "  Account:  $GOOGLE_WS_EMAIL"
+    fi
+    if [[ ${#GOOGLE_WS_SERVICES[@]} -gt 0 ]]; then
+      echo -e "  Services: ${GOOGLE_WS_SERVICES[*]}"
+    fi
+  fi
+
   echo ""
   echo -e "  ${CYAN}Reconfigure later:  $0 --reconfigure${NC}"
   echo ""
@@ -2045,6 +2317,7 @@ main() {
   toggle_features
   setup_channels
   setup_models
+  setup_google_workspace
   generate_config
 
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
@@ -2055,6 +2328,9 @@ main() {
 
   # [IMPROVEMENT 1] Channel pairing (WhatsApp QR, Signal linking)
   run_channel_pairing
+
+  # Google Workspace skill install + OAuth
+  run_google_workspace_setup
 
   # [IMPROVEMENT 3] Post-setup verification
   run_health_check
