@@ -21,3 +21,8 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+
+# Dry run artifacts
+/n/
+/obsidian-vault/
+*.plist

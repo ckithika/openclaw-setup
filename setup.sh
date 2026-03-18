@@ -1530,6 +1530,7 @@ setup_skills() {
 
   # Generate install script for Docker mode
   if [[ "$DEPLOY_MODE" == "docker" && ${#install_cmds[@]} -gt 0 ]]; then
+    mkdir -p "${INSTANCE_DIR}"
     local script_path="${INSTANCE_DIR}/install-skills.sh"
     {
       echo "#!/usr/bin/env bash"

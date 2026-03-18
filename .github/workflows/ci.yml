@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: bash -n setup.sh
+
+      - name: ShellCheck
+        run: shellcheck setup.sh --severity=warning --exclude=SC2034,SC2155
+
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version flag works
+        run: bash setup.sh --version
+
+      - name: Help flag works
+        run: bash setup.sh --help

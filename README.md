@@ -1,160 +1,230 @@
 # openclaw-setup
 
-A unified, interactive setup script for [OpenClaw](https://openclaw.ai) — the open-source personal AI assistant. Supports both **native macOS** and **Docker** deployments from a single script, with full feature toggles, credential management, and multi-instance support.
+A unified, interactive setup script for [OpenClaw](https://openclaw.ai) — the open-source personal AI assistant. One script handles native macOS + Docker deployments, 26 feature toggles, 7 model providers, unified Obsidian brain, Claude knowledge sync, and multi-Mac GitHub backup.
 
-Built for the **Apple Silicon Mac Mini** (M4/M3/M2/M1) but works on any macOS or Linux system.
-
-## Why This Exists
-
-Setting up OpenClaw involves configuring models, channels, security, sandboxing, browser automation, and more. Existing scripts either focus on a single deployment mode, lack feature granularity, or skip credential setup entirely.
-
-This script gives you:
-
-- **One script, two modes** — Native or Docker, same wizard
-- **Multi-instance support** — Run a personal assistant natively + isolated work agents in Docker
-- **13 toggleable features** — Browser, sandbox, cron, memory, skills, code execution, and more
-- **Real credential setup** — Prompts for actual API keys and bot tokens during install
-- **Channel pairing** — Guides you through WhatsApp QR scanning and Signal device linking
-- **Post-setup health checks** — Validates config, credentials, and connectivity
-- **Reconfigure mode** — Modify an existing instance without starting from scratch
-- **Tailscale integration** — Per-instance remote access via sidecar containers
-- **Daily backups** — Optional automated backup with 7-day retention (Docker mode)
+Built for **Apple Silicon** (M4/M3/M2/M1) but works on any macOS or Linux system.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/ckithika/openclaw-setup.git
 cd openclaw-setup
-chmod +x setup.sh
 ./setup.sh
 ```
 
 ## Usage
 
 ```bash
-# Fresh setup (interactive wizard)
-./setup.sh
-
-# Reconfigure an existing instance
-./setup.sh --reconfigure
-
-# Show version
-./setup.sh --version
-
-# Help
-./setup.sh --help
+./setup.sh                 # Fresh interactive setup
+./setup.sh --reconfigure   # Modify an existing instance
+./setup.sh --version       # Show version (v3.0.0)
+./setup.sh --help          # Show help
 ```
 
-## What It Configures
+## What This Does
 
-### Deployment Modes
+The setup wizard walks you through 13 phases:
 
-| Mode | Best For |
-|------|----------|
-| **native** | Personal assistant on macOS with full system access (iMessage, GPU, filesystem) |
-| **docker** | Work agents, multi-account isolation, sandboxed environments |
+```
+ 1.  Pre-flight checks         Hardware, Ollama, Docker, Node.js, disk
+ 2.  Deployment mode           Native macOS or Docker container
+ 3.  Instance config           Name, directories, ports
+ 4.  Feature toggles           26 toggleable capabilities
+ 5.  Channels                  WhatsApp, Telegram, Discord, Slack, Signal, iMessage
+ 6.  Model provider            7 providers with credential prompting
+ 7.  Google Workspace          Gmail, Calendar, Drive via gog/MCP/OAuth
+ 8.  Obsidian vault            Unified brain — single source of truth
+ 9.  Tag taxonomy              Auto-tagging with life areas and projects
+10.  Claude knowledge sync     Web + Code session export, retention fix
+11.  Skills                    6 categories, 13+ skills
+12.  Memory config             Compaction fix, Mem0, Cognee
+13.  GitHub backup             Private repo, auto-sync, multi-Mac
+```
 
-### Feature Toggles
+## Feature Toggles
+
+### Core (26 toggles)
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| Browser automation | ON | Chromium via CDP for web interaction |
+| Browser automation | ON | Chromium via CDP |
 | Sandbox | ON | Docker-based tool isolation |
-| Cron jobs | ON | Scheduled tasks and automation |
+| Cron jobs | ON | Scheduled tasks |
 | Persistent memory | ON | Cross-session memory |
-| Skills marketplace | ON | ClawHub skill installation |
-| Code execution | ON | Python and Node.js sandboxes |
-| Web search | ON | Internet search capability |
+| Skills marketplace | ON | ClawHub skills |
+| Code execution | ON | Python/Node.js sandboxes |
+| Web search | ON | Internet search |
 | Web fetch | ON | Read web pages |
 | File access | ON | Read/write filesystem |
-| Shell execution | ON | Run system commands |
-| Messaging | ON | Cross-session agent messaging |
+| Shell execution | ON | System commands |
+| Messaging | ON | Cross-session messaging |
 | Voice/TTS | OFF | macOS native only |
-| Claude Code | OFF | ACP integration |
+| Claude Code (ACP) | OFF | Agent Client Protocol |
+| Google Workspace | OFF | Gmail, Calendar, Drive |
+| Obsidian vault | OFF | Unified brain |
+| Claude sync | OFF | Export Claude conversations |
+| Tag taxonomy | OFF | Auto-tagging system |
+| GitHub backup | OFF | Private repo + multi-Mac sync |
+| Mem0 | OFF | External vector memory |
+| Cognee | OFF | Knowledge graph |
+| Skills: Productivity | OFF | GitHub, Obsidian, Notion, Summarize |
+| Skills: Social Media | OFF | Upload-Post, Genviral, Mixpost |
+| Skills: Research | OFF | Tavily search |
+| Skills: Security | OFF | SecureClaw |
+| Skills: Communication | OFF | AgentMail, Slack |
+| Granola | OFF | Meeting notes sync |
 
-### Channels
-
-| Channel | Auth Method | Notes |
-|---------|-------------|-------|
-| WebChat | None | Always available via browser |
-| WhatsApp | QR code scan | Script guides pairing post-setup |
-| Telegram | Bot token | Prompts for token from @BotFather |
-| Discord | Bot token | Prompts for token from Developer Portal |
-| Slack | Bot + App tokens | Prompts for both xoxb and xapp tokens |
-| Signal | Device linking | Script triggers linking post-setup |
-| iMessage | macOS native | Native mode only |
-
-### Models
+### Model Providers
 
 | Provider | Models | Cost |
 |----------|--------|------|
-| **Ollama Cloud** (recommended) | GLM-5, Kimi K2.5, DeepSeek V3.2 | Free |
-| Ollama Local | Any model that fits in RAM | Free |
-| Anthropic | Claude Sonnet/Opus | Paid |
-| OpenAI | GPT-5.x | Paid |
+| **Ollama Cloud** | GLM-5, Kimi K2.5, DeepSeek V3.2 | Free |
+| Ollama Local | Devstral, Nemotron, Qwen, DeepSeek | Free |
+| Anthropic | Claude Sonnet/Opus/Haiku | Paid |
+| OpenAI | GPT-5.4, GPT-5-mini, GPT-4o | Paid |
+| OpenRouter | 100+ models, one API key | Paid |
+| Google | Gemini 3.1 Pro, Flash | Free tier |
+| Groq | Llama 4, DeepSeek R1, Qwen | Free tier |
+
+### Channels
+
+| Channel | Auth | Notes |
+|---------|------|-------|
+| WebChat | None | Always available |
+| WhatsApp | QR code | Script guides pairing |
+| Telegram | Bot token | Prompts from @BotFather |
+| Discord | Bot token | Developer Portal |
+| Slack | Bot + App tokens | Socket Mode |
+| Signal | Device linking | Post-setup |
+| iMessage | macOS native | Native mode only |
 
 ## Architecture
+
+### Unified Brain
+
+When Obsidian vault is enabled, all knowledge flows into one place:
+
+```
+INPUTS                              OBSIDIAN VAULT
+──────                              ──────────────
+Claude.ai (web/desktop/mobile) ──→  /claude-web/
+Claude Code sessions ─────────────→ /claude-code/
+Claude Code memory (symlink) ─────→ /claude-memory/
+Granola meetings ─────────────────→ /meetings/
+Gmail (via gog) ──────────────────→ /emails/
+OpenClaw session memory ──────────→ /memory/
+OpenClaw daily distills ──────────→ /daily/
+Your notes ───────────────────────→ /projects/
+                                         │
+                                    Cognee Graph
+                                    (relationships)
+                                         │
+                                    OpenClaw Recall
+                                    (injects context)
+```
 
 ### Personal + Work Agent Setup
 
 ```
 Mac Mini (M4, 16GB)
 ├── Native: Personal OpenClaw
-│   ├── Full macOS access (iMessage, GPU, filesystem)
+│   ├── Obsidian vault (unified brain)
 │   ├── Ollama cloud model (GLM-5)
+│   ├── Google Workspace (gog)
 │   └── WebChat + WhatsApp + iMessage
 │
 ├── Docker: Work Agent 1 (Brand A)
-│   ├── Tailscale sidecar (openclaw-brand-a.ts.net)
-│   ├── Isolated Chrome profile (Google Account A)
-│   ├── Telegram + social media skills
+│   ├── Tailscale sidecar
+│   ├── Isolated Chrome profile
+│   ├── Social media skills
 │   └── Daily backups
 │
 ├── Docker: Work Agent 2 (Brand B)
-│   ├── Tailscale sidecar (openclaw-brand-b.ts.net)
-│   ├── Isolated Chrome profile (Google Account B)
+│   ├── Tailscale sidecar
+│   ├── Isolated Chrome profile
 │   └── Discord + scheduling
 │
-└── Shared: Ollama (native, localhost:11434)
-    └── All instances connect to the same Ollama
+├── Shared: Ollama (native, localhost:11434)
+│
+└── GitHub: Private brain repo
+    └── Auto-sync every 10 min across all Macs
+```
+
+### Multi-Mac Sync
+
+```
+First Mac:   ./setup.sh → "Existing brain repo?" → No  → Creates + pushes
+Second Mac:  ./setup.sh → "Existing brain repo?" → Yes → Clones + configures
 ```
 
 ### Generated Files
 
-**Native mode:**
+**With Obsidian vault enabled:**
 ```
+~/obsidian-vault/                    # Single brain
+├── _taxonomy.md                     # Tag reference
+├── .gitignore                       # Git exclusions
+├── AGENTS.md                        # OpenClaw instructions + tagging rules
+├── claude-web/                      # Claude Vault sync
+├── claude-code/                     # Claude Extractor
+├── claude-memory/ → ~/.claude/...   # Symlink
+├── meetings/                        # Granola
+├── emails/                          # Gmail
+├── memory/                          # OpenClaw memory
+├── daily/                           # Session distills
+└── projects/                        # Your notes
+
 ~/.openclaw/
-├── openclaw.json          # Main config
-├── credentials/           # API keys (chmod 700)
-│   ├── anthropic.json
-│   └── openai.json
-└── workspace/
-    └── AGENTS.md
+├── openclaw.json                    # Config (workspace → vault)
+├── credentials/                     # API keys (chmod 700)
+└── vault-sync.sh                    # Git auto-sync script
+
+~/Library/LaunchAgents/
+└── com.openclaw.vault-sync.plist    # 10-min auto-sync
 ```
 
 **Docker mode:**
 ```
 ~/openclaw-instances/work-agent-1/
-├── config/
-│   ├── openclaw.json
-│   └── credentials/
-├── workspace/
-├── chrome-profile/        # Persistent Chrome data
-├── backups/               # Daily backups (if enabled)
+├── config/openclaw.json
+├── workspace/                       # Or vault mount
+├── chrome-profile/
+├── google-credentials/
+├── backups/
 ├── docker-compose.yml
-└── .env                   # Tailscale key, channel tokens
+├── install-skills.sh                # Auto-generated
+└── .env
 ```
+
+## Memory Architecture
+
+The script fixes OpenClaw's known memory compaction issue:
+
+| Setting | Default | This Script | Effect |
+|---------|---------|-------------|--------|
+| `softThresholdTokens` | 4000 | **40000** | Agent has room to save before compaction |
+| `distillToMemory` | false | **true** | Sessions auto-save to daily files |
+| `sessionRetention` | 30 days | **unlimited** | Claude Code stops deleting logs |
+
+Optional memory plugins:
+
+| Plugin | What It Does | How |
+|--------|-------------|-----|
+| **Mem0** | Stores memories outside context window — survives compaction | Self-hosted or cloud vector DB |
+| **Cognee** | Knowledge graph across all vault content — finds relationships | Graph traversal, auto-index |
 
 ## Security
 
-- Input validation on all user inputs (rejects control chars, path traversal, shell metacharacters)
+- Input validation on all user inputs (rejects control chars, path traversal, shell injection)
 - Credentials stored with `chmod 600`/`700` permissions
-- API keys entered via hidden input (not echoed to terminal)
-- Docker containers run with `cap_drop: ALL`, `no-new-privileges`
+- API keys entered via hidden input (`read -s`)
+- Docker containers: `cap_drop: ALL`, `no-new-privileges`, healthchecks
 - Gateway bound to loopback by default
 - Unique auth tokens auto-generated per instance
-- Token format validation for Telegram and Discord
+- Token format validation (Telegram, Discord)
 - API key verification against provider endpoints
+- Optional `git-crypt` for sensitive vault folders
+- Claude Code session retention fix (prevents data loss)
 
 ## Prerequisites
 
@@ -163,38 +233,48 @@ Mac Mini (M4, 16GB)
 | macOS or Linux | All | - |
 | Bash 3.2+ | All | Pre-installed |
 | [Ollama](https://ollama.com) | Cloud/local models | `brew install ollama` |
-| [Docker](https://www.docker.com) / [OrbStack](https://orbstack.dev) | Docker mode + sandboxing | `brew install --cask orbstack` |
+| [Docker](https://www.docker.com) / [OrbStack](https://orbstack.dev) | Docker mode | `brew install --cask orbstack` |
 | Node.js 18+ | Native mode | `brew install node` |
-| jq | Config generation | Auto-installed by script |
-| [Tailscale](https://tailscale.com) | Remote access (optional) | `brew install tailscale` |
+| jq | Config generation | Auto-installed |
+| [Tailscale](https://tailscale.com) | Remote access | `brew install tailscale` |
+| [GitHub CLI](https://cli.github.com) | GitHub backup | `brew install gh` |
+| Python 3 | Claude sync tools | Pre-installed on macOS |
 
-## Comparison with Other Setup Scripts
+## Comparison
 
 | Capability | **This Script** | Official docker-setup.sh | RareCloudio VPS | Coolabs Docker |
 |---|---|---|---|---|
 | Multi-instance | Yes | No | No | No |
 | Native + Docker | Yes | Docker only | Native only | Docker only |
-| Feature toggles | 13 interactive | Env vars | CLI flags | Env vars |
-| Channel credentials | Prompted + validated | Manual post-setup | Manual post-setup | Env vars |
+| Feature toggles | 26 interactive | Env vars | CLI flags | Env vars |
+| Model providers | 7 with menus | Manual CLI | Manual CLI | Env vars |
+| Channel credentials | Prompted + validated | Manual | Manual | Env vars |
 | WhatsApp QR pairing | Guided | No | No | No |
 | API key verification | Yes | No | No | No |
-| Input validation | Yes | Yes | Yes | Moderate |
-| Security hardening | Docker-level | Docker-level | OS-level (8 layers) | Auth + ACLs |
-| Backups | Optional daily | No | Yes (daily) | No |
+| Unified brain (Obsidian) | Yes | No | No | No |
+| Claude knowledge sync | Yes | No | No | No |
+| Tag taxonomy | Yes | No | No | No |
+| Skills categories | 6 toggleable | No | No | No |
+| Memory compaction fix | Yes | No | No | No |
+| Mem0/Cognee plugins | Yes | No | No | No |
+| GitHub backup | Yes | No | No | No |
+| Multi-Mac sync | Yes | No | No | No |
+| Backups | Docker daily | No | Daily | No |
 | Health checks | Yes | No | No | No |
 | Reconfigure mode | Yes | No | No | No |
-| Tailscale integration | Per-instance sidecar | No | No | No |
+| Tailscale integration | Per-instance | No | No | No |
+| Input validation | Yes | Yes | Yes | Moderate |
+| Security hardening | Docker-level | Docker-level | OS-level (8 layers) | Auth + ACLs |
 
 ## Contributing
 
-Contributions are welcome. Please open an issue first to discuss what you would like to change.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Test your changes (`bash -n setup.sh` for syntax, then a dry run)
-4. Commit your changes
-5. Push to the branch
-6. Open a Pull Request
+2. Create a feature branch (`git checkout -b feature/name`)
+3. Run `bash -n setup.sh` (syntax check)
+4. Test with a dry run
+5. Submit a PR
 
 ## License
 
