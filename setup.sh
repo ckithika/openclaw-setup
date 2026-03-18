@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# OpenClaw Unified Setup Script v2
+# OpenClaw Unified Setup Script v3
 # Works for both native (macOS) and Docker instance deployments
 # M4 Mac Mini optimized | Cloud models preferred
 #
@@ -11,10 +11,20 @@
 #   4. Backup cron — optional daily backup in Docker Compose
 #   5. Credential prompting — asks for API keys during setup
 #   6. --reconfigure flag — re-run on existing instance to modify features
+#
+# v3 New Features (Unified Brain):
+#   7. Obsidian vault — single source of truth for all knowledge
+#   8. Claude knowledge sync — web + Code sessions into vault
+#   9. Auto-tagging taxonomy — consistent tags across all sources
+#  10. GitHub backup — private repo + multi-Mac sync via launchd
+#  11. Mem0 external memory — survives context compaction
+#  12. Cognee knowledge graph — relationship search across vault
+#  13. Skills bundles — productivity, social, research, security, comms
+#  14. Granola meeting notes — auto-sync into vault
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="3.0.0"
 RECONFIGURE=false
 EXISTING_CONFIG=""
 
@@ -319,6 +329,36 @@ GROQ_API_KEY=""
 # Backup
 FEAT_BACKUP=false
 
+# v3: Unified Brain
+FEAT_OBSIDIAN_VAULT=false
+FEAT_CLAUDE_SYNC=false
+FEAT_TAG_TAXONOMY=false
+FEAT_GITHUB_BACKUP=false
+FEAT_MEM0=false
+FEAT_COGNEE=false
+FEAT_SKILLS_PRODUCTIVITY=false
+FEAT_SKILLS_SOCIAL=false
+FEAT_SKILLS_RESEARCH=false
+FEAT_SKILLS_SECURITY=false
+FEAT_SKILLS_COMMS=false
+FEAT_GRANOLA=false
+
+# Obsidian vault
+VAULT_PATH=""
+VAULT_IS_NEW=true
+
+# Tag taxonomy
+TAG_LIFE_AREAS=()
+TAG_PROJECTS=()
+
+# GitHub backup
+GITHUB_BRAIN_REPO=""
+GITHUB_BRAIN_EXISTS=false
+FEAT_GIT_CRYPT=false
+
+# Claude sync
+CLAUDE_RETENTION_FIXED=false
+
 # ── Pre-flight Checks ───────────────────────────────────────────────────────
 preflight() {
   header "Pre-flight Checks"
@@ -518,6 +558,20 @@ load_existing_config() {
   browser_enabled=$(echo "$cfg" | jq -r '.browser.enabled // false' 2>/dev/null)
   [[ "$browser_enabled" == "true" ]] && FEAT_BROWSER=true || FEAT_BROWSER=false
 
+  # Restore v3 plugin toggles (Mem0, Cognee)
+  local mem0_enabled
+  mem0_enabled=$(echo "$cfg" | jq -r '.plugins.mem0.enabled // false' 2>/dev/null)
+  [[ "$mem0_enabled" == "true" ]] && FEAT_MEM0=true || FEAT_MEM0=false
+
+  local cognee_enabled
+  cognee_enabled=$(echo "$cfg" | jq -r '.plugins.cognee.enabled // false' 2>/dev/null)
+  [[ "$cognee_enabled" == "true" ]] && FEAT_COGNEE=true || FEAT_COGNEE=false
+
+  # Restore v3 session flags
+  local memory_flush_enabled
+  memory_flush_enabled=$(echo "$cfg" | jq -r '.session.memoryFlush.enabled // false' 2>/dev/null)
+  # memoryFlush is always enabled in v3; no separate toggle needed
+
   success "Loaded existing config for: $INSTANCE_NAME ($DEPLOY_MODE)"
   info "Current model: $current_model"
   info "Proceeding to feature toggles — modify what you need, keep the rest."
@@ -577,6 +631,18 @@ toggle_features() {
     "FEAT_VOICE:Voice/TTS (macOS native only):$FEAT_VOICE"
     "FEAT_CLAUDE_CODE:Claude Code integration (ACP):$FEAT_CLAUDE_CODE"
     "FEAT_GOOGLE_WORKSPACE:Google Workspace (Gmail, Calendar, Drive):$FEAT_GOOGLE_WORKSPACE"
+    "FEAT_OBSIDIAN_VAULT:Obsidian unified brain (single source of truth):$FEAT_OBSIDIAN_VAULT"
+    "FEAT_CLAUDE_SYNC:Claude knowledge sync (web + Code sessions):$FEAT_CLAUDE_SYNC"
+    "FEAT_TAG_TAXONOMY:Auto-tagging taxonomy system:$FEAT_TAG_TAXONOMY"
+    "FEAT_GITHUB_BACKUP:GitHub private repo backup + multi-Mac sync:$FEAT_GITHUB_BACKUP"
+    "FEAT_MEM0:Mem0 external memory (survives compaction):$FEAT_MEM0"
+    "FEAT_COGNEE:Cognee knowledge graph (relationship search):$FEAT_COGNEE"
+    "FEAT_SKILLS_PRODUCTIVITY:Skills: GitHub, Obsidian, Notion, Summarize:$FEAT_SKILLS_PRODUCTIVITY"
+    "FEAT_SKILLS_SOCIAL:Skills: Upload-Post, Genviral, Mixpost:$FEAT_SKILLS_SOCIAL"
+    "FEAT_SKILLS_RESEARCH:Skills: Tavily search:$FEAT_SKILLS_RESEARCH"
+    "FEAT_SKILLS_SECURITY:Skills: SecureClaw:$FEAT_SKILLS_SECURITY"
+    "FEAT_SKILLS_COMMS:Skills: AgentMail, Slack:$FEAT_SKILLS_COMMS"
+    "FEAT_GRANOLA:Granola meeting notes sync:$FEAT_GRANOLA"
   )
 
   for feat_line in "${features[@]}"; do
@@ -1184,6 +1250,477 @@ run_google_workspace_setup() {
   success "Google Workspace setup guidance complete"
 }
 
+setup_obsidian_vault() {
+  [[ "$FEAT_OBSIDIAN_VAULT" != "true" ]] && return
+
+  header "Obsidian Vault Setup"
+
+  echo -e "  ${CYAN}Your Obsidian vault becomes the single source of truth for:${NC}"
+  echo -e "  OpenClaw memory, Claude conversations, Granola meetings, Gmail, and your notes."
+  echo ""
+
+  if ask_yn "Do you have an existing Obsidian vault?" "n"; then
+    VAULT_PATH=$(ask_input "Path to existing Obsidian vault" "$HOME/obsidian-vault")
+    VAULT_IS_NEW=false
+    if [[ ! -d "$VAULT_PATH" ]]; then
+      warn "Directory not found — will create it"
+      VAULT_IS_NEW=true
+    fi
+  else
+    VAULT_PATH=$(ask_input "Where to create your vault" "$HOME/obsidian-vault")
+    VAULT_IS_NEW=true
+  fi
+
+  success "Vault path: $VAULT_PATH"
+
+  # Create folder structure
+  local folders=("claude-web" "claude-code" "claude-memory" "meetings" "emails" "memory" "daily" "projects")
+  for folder in "${folders[@]}"; do
+    mkdir -p "${VAULT_PATH}/${folder}"
+  done
+  success "Vault folder structure created"
+
+  # Point OpenClaw workspace at vault
+  WORKSPACE_DIR="$VAULT_PATH"
+  info "OpenClaw workspace will point to: $VAULT_PATH"
+}
+
+setup_tag_taxonomy() {
+  [[ "$FEAT_TAG_TAXONOMY" != "true" ]] && return
+  [[ "$FEAT_OBSIDIAN_VAULT" != "true" ]] && { warn "Tag taxonomy requires Obsidian vault — skipping"; return; }
+
+  header "Tag Taxonomy"
+
+  echo -e "  ${CYAN}Define your life areas and projects for auto-tagging.${NC}"
+  echo -e "  ${CYAN}These tags will be applied across all knowledge sources.${NC}"
+  echo ""
+
+  # Default life areas
+  echo -e "  ${BOLD}Default life areas:${NC} personal, work, finances, hobbies, travel, health"
+  if ask_yn "Use these defaults?" "y"; then
+    TAG_LIFE_AREAS=("personal" "work" "finances" "hobbies" "travel" "health")
+  else
+    local areas_input
+    areas_input=$(ask_input "Enter life areas (comma-separated)" "personal,work,finances")
+    IFS=',' read -ra TAG_LIFE_AREAS <<< "$areas_input"
+  fi
+  success "Life areas: ${TAG_LIFE_AREAS[*]}"
+
+  # Projects
+  echo ""
+  if ask_yn "Add project tags?" "y"; then
+    local projects_input
+    projects_input=$(ask_input "Enter project names (comma-separated)" "")
+    if [[ -n "$projects_input" ]]; then
+      IFS=',' read -ra TAG_PROJECTS <<< "$projects_input"
+      success "Projects: ${TAG_PROJECTS[*]}"
+    fi
+  fi
+
+  # Generate _taxonomy.md
+  local taxonomy_file="${VAULT_PATH}/_taxonomy.md"
+  {
+    echo "# Tag Taxonomy"
+    echo ""
+    echo "Reference for all tags used across this vault."
+    echo ""
+    echo "## Life Areas"
+    for area in "${TAG_LIFE_AREAS[@]}"; do
+      area=$(echo "$area" | xargs)  # trim whitespace
+      echo "- \`#${area}\`"
+    done
+    echo ""
+    echo "## Projects"
+    if [[ ${#TAG_PROJECTS[@]} -gt 0 ]]; then
+      for proj in "${TAG_PROJECTS[@]}"; do
+        proj=$(echo "$proj" | xargs)
+        echo "- \`#project/${proj}\`"
+      done
+    else
+      echo "_No projects defined yet. Add with: \`#project/name\`_"
+    fi
+    echo ""
+    echo "## Content Types (auto-applied)"
+    echo "- \`#type/meeting\` — Granola meeting notes"
+    echo "- \`#type/email\` — Gmail digests"
+    echo "- \`#type/conversation\` — Claude conversations"
+    echo "- \`#type/note\` — Manual notes"
+    echo "- \`#type/memory\` — OpenClaw memory"
+    echo "- \`#type/daily\` — Daily session distills"
+    echo ""
+    echo "## Sources (auto-applied)"
+    echo "- \`#source/claude-web\`"
+    echo "- \`#source/claude-code\`"
+    echo "- \`#source/granola\`"
+    echo "- \`#source/gmail\`"
+    echo "- \`#source/openclaw\`"
+    echo "- \`#source/manual\`"
+  } > "$taxonomy_file"
+  success "Taxonomy written to ${taxonomy_file}"
+}
+
+setup_claude_sync() {
+  [[ "$FEAT_CLAUDE_SYNC" != "true" ]] && return
+
+  header "Claude Knowledge Sync"
+
+  echo -e "  ${CYAN}Sync all Claude conversations into your unified brain.${NC}"
+  echo ""
+
+  # Fix session retention
+  echo -e "  ${BOLD}1. Fix Claude Code session retention${NC}"
+  echo -e "  Claude Code deletes session logs after 30 days by default."
+  local claude_settings="$HOME/.claude/settings.json"
+  if [[ -f "$claude_settings" ]]; then
+    if python3 -c "import json; c=json.load(open('$claude_settings')); assert c.get('storage',{}).get('sessionRetention') == 'unlimited'" 2>/dev/null; then
+      success "  Session retention already set to unlimited"
+      CLAUDE_RETENTION_FIXED=true
+    else
+      if ask_yn "  Set session retention to unlimited?" "y"; then
+        python3 -c "
+import json
+p='$claude_settings'
+try:
+    c=json.load(open(p))
+except: c={}
+c.setdefault('storage',{})['sessionRetention']='unlimited'
+json.dump(c,open(p,'w'),indent=2)
+print('done')
+" 2>/dev/null && { success "  Session retention set to unlimited"; CLAUDE_RETENTION_FIXED=true; } \
+  || warn "  Failed to update settings — set manually in ~/.claude/settings.json"
+      fi
+    fi
+  else
+    mkdir -p "$HOME/.claude"
+    echo '{"storage":{"sessionRetention":"unlimited"}}' > "$claude_settings"
+    success "  Created ~/.claude/settings.json with unlimited retention"
+    CLAUDE_RETENTION_FIXED=true
+  fi
+
+  # Symlink Claude Code memory into vault
+  if [[ "$FEAT_OBSIDIAN_VAULT" == "true" && -n "$VAULT_PATH" ]]; then
+    echo ""
+    echo -e "  ${BOLD}2. Symlink Claude Code memory into vault${NC}"
+    local claude_mem_src="$HOME/.claude/projects/-Users-$(whoami)/memory"
+    if [[ -d "$claude_mem_src" ]]; then
+      local target="${VAULT_PATH}/claude-memory"
+      if [[ -L "$target" ]]; then
+        success "  Symlink already exists: $target"
+      elif [[ -d "$target" && -z "$(ls -A "$target" 2>/dev/null)" ]]; then
+        rmdir "$target" 2>/dev/null
+        ln -s "$claude_mem_src" "$target"
+        success "  Symlinked $claude_mem_src → $target"
+      else
+        info "  claude-memory folder has content — skipping symlink"
+        info "  Manually link: ln -s $claude_mem_src $target"
+      fi
+    else
+      info "  No Claude Code memory found yet at $claude_mem_src"
+      info "  Symlink will be created after your first Claude Code session"
+    fi
+  fi
+
+  echo ""
+  echo -e "  ${BOLD}3. Tools to install after setup:${NC}"
+  echo ""
+  echo -e "  ${CYAN}Claude Vault${NC} (syncs web/desktop/mobile conversations):"
+  echo "    pip install claude-vault"
+  echo "    claude-vault sync --vault ${VAULT_PATH:-~/obsidian-vault}/claude-web/ --watch"
+  echo ""
+  echo -e "  ${CYAN}Claude Conversation Extractor${NC} (exports Claude Code sessions):"
+  echo "    pip install claude-conversation-extractor"
+  echo "    claude-extract --output ${VAULT_PATH:-~/obsidian-vault}/claude-code/ --format markdown"
+  echo ""
+
+  if [[ "$DEPLOY_MODE" == "native" ]]; then
+    if ask_yn "Install Claude Vault now (pip)?" "n"; then
+      pip3 install claude-vault 2>/dev/null && success "Claude Vault installed" || warn "Install failed — run later: pip install claude-vault"
+    fi
+    if ask_yn "Install Claude Conversation Extractor now (pip)?" "n"; then
+      pip3 install claude-conversation-extractor 2>/dev/null && success "Claude Extractor installed" || warn "Install failed — run later: pip install claude-conversation-extractor"
+    fi
+  fi
+
+  success "Claude sync configured"
+}
+
+setup_skills() {
+  local any_skills=false
+  [[ "$FEAT_SKILLS_PRODUCTIVITY" == "true" || "$FEAT_SKILLS_SOCIAL" == "true" || \
+     "$FEAT_SKILLS_RESEARCH" == "true" || "$FEAT_SKILLS_SECURITY" == "true" || \
+     "$FEAT_SKILLS_COMMS" == "true" || "$FEAT_GRANOLA" == "true" ]] && any_skills=true
+
+  [[ "$any_skills" == "false" ]] && return
+
+  header "Skills Setup"
+
+  echo -e "  ${CYAN}Skills will be installed after OpenClaw is running.${NC}"
+  echo -e "  ${CYAN}Commands listed below for reference.${NC}"
+  echo ""
+
+  local install_cmds=()
+
+  if [[ "$FEAT_SKILLS_PRODUCTIVITY" == "true" ]]; then
+    echo -e "  ${GREEN}[Productivity]${NC}"
+    echo "    openclaw skills install github"
+    echo "    openclaw skills install obsidian"
+    echo "    openclaw skills install notion"
+    echo "    openclaw skills install summarize"
+    if [[ "$DEPLOY_MODE" == "native" ]]; then
+      echo "    openclaw skills install apple-notes"
+    fi
+    install_cmds+=("github" "obsidian" "notion" "summarize")
+    if [[ "$DEPLOY_MODE" == "native" ]]; then
+      install_cmds+=("apple-notes")
+    fi
+    echo ""
+  fi
+
+  if [[ "$FEAT_SKILLS_SOCIAL" == "true" ]]; then
+    echo -e "  ${GREEN}[Social Media]${NC}"
+    echo "    openclaw skills install upload-post"
+    echo "    openclaw skills install genviral"
+    echo "    openclaw skills install mixpost"
+    install_cmds+=("upload-post" "genviral" "mixpost")
+    echo ""
+  fi
+
+  if [[ "$FEAT_SKILLS_RESEARCH" == "true" ]]; then
+    echo -e "  ${GREEN}[Research]${NC}"
+    echo "    openclaw skills install tavily"
+    install_cmds+=("tavily")
+    echo ""
+  fi
+
+  if [[ "$FEAT_SKILLS_SECURITY" == "true" ]]; then
+    echo -e "  ${GREEN}[Security]${NC}"
+    echo "    openclaw skills install secureclaw"
+    install_cmds+=("secureclaw")
+    echo ""
+  fi
+
+  if [[ "$FEAT_SKILLS_COMMS" == "true" ]]; then
+    echo -e "  ${GREEN}[Communication]${NC}"
+    echo "    openclaw skills install agentmail"
+    echo "    openclaw skills install slack"
+    install_cmds+=("agentmail" "slack")
+    echo ""
+  fi
+
+  if [[ "$FEAT_GRANOLA" == "true" ]]; then
+    echo -e "  ${GREEN}[Meetings]${NC}"
+    echo "    openclaw skills install granola"
+    install_cmds+=("granola")
+    echo ""
+  fi
+
+  # Offer batch install for native mode
+  if [[ "$DEPLOY_MODE" == "native" && ${#install_cmds[@]} -gt 0 ]]; then
+    if command -v openclaw &>/dev/null; then
+      if ask_yn "Install all ${#install_cmds[@]} skills now?" "n"; then
+        for skill in "${install_cmds[@]}"; do
+          info "Installing $skill..."
+          openclaw skills install "$skill" 2>/dev/null && success "  $skill installed" || warn "  $skill failed"
+        done
+      fi
+    else
+      info "OpenClaw not installed yet — install skills after running: npm install -g openclaw"
+    fi
+  fi
+
+  # Generate install script for Docker mode
+  if [[ "$DEPLOY_MODE" == "docker" && ${#install_cmds[@]} -gt 0 ]]; then
+    local script_path="${INSTANCE_DIR}/install-skills.sh"
+    {
+      echo "#!/usr/bin/env bash"
+      echo "# Auto-generated skills installer for ${INSTANCE_NAME}"
+      echo "# Run inside container: docker compose exec openclaw-${INSTANCE_NAME} bash /home/node/openclaw/workspace/install-skills.sh"
+      echo ""
+      for skill in "${install_cmds[@]}"; do
+        echo "echo 'Installing $skill...' && openclaw skills install $skill"
+      done
+    } > "$script_path"
+    chmod +x "$script_path"
+    success "Skills install script written to $script_path"
+  fi
+
+  success "Skills configured (${#install_cmds[@]} skills)"
+}
+
+setup_memory_config() {
+  # Always runs — applies memory fix to generated config
+  # The actual config values are used in generate_config()
+  # Mem0 and Cognee are optional plugin toggles
+
+  if [[ "$FEAT_MEM0" == "true" || "$FEAT_COGNEE" == "true" ]]; then
+    header "Memory Plugins"
+  fi
+
+  if [[ "$FEAT_MEM0" == "true" ]]; then
+    echo -e "  ${BOLD}Mem0${NC} — External vector memory that survives context compaction."
+    echo -e "  Requires running Mem0 server (self-hosted or cloud)."
+    echo ""
+    echo -e "  Self-hosted: ${CYAN}docker run -d -p 8080:8080 mem0ai/mem0${NC}"
+    echo -e "  Cloud: ${CYAN}https://app.mem0.ai${NC}"
+    echo ""
+    info "Mem0 plugin will be added to openclaw.json"
+  fi
+
+  if [[ "$FEAT_COGNEE" == "true" ]]; then
+    echo ""
+    echo -e "  ${BOLD}Cognee${NC} — Knowledge graph that indexes your vault and finds relationships."
+    echo -e "  Requires running Cognee server."
+    echo ""
+    echo -e "  Install: ${CYAN}docker run -d -p 8000:8000 cognee/cognee${NC}"
+    echo ""
+    info "Cognee plugin will be added to openclaw.json"
+  fi
+
+  if [[ "$FEAT_MEM0" == "true" || "$FEAT_COGNEE" == "true" ]]; then
+    success "Memory plugins configured"
+  fi
+}
+
+setup_github_backup() {
+  [[ "$FEAT_GITHUB_BACKUP" != "true" ]] && return
+  [[ "$FEAT_OBSIDIAN_VAULT" != "true" ]] && { warn "GitHub backup requires Obsidian vault — skipping"; return; }
+
+  header "GitHub Backup & Multi-Mac Sync"
+
+  # Check gh CLI
+  local gh_bin
+  gh_bin=$(command -v gh 2>/dev/null || echo /opt/homebrew/bin/gh)
+  if ! "$gh_bin" auth status &>/dev/null 2>&1; then
+    warn "GitHub CLI not authenticated — run: gh auth login"
+    warn "Skipping GitHub repo setup — configure manually later"
+    return
+  fi
+
+  echo -e "  ${CYAN}Your vault will be synced to a private GitHub repo.${NC}"
+  echo -e "  ${CYAN}This enables backup, version history, and multi-Mac sync.${NC}"
+  echo ""
+
+  if ask_yn "Do you have an existing brain repo on GitHub?" "n"; then
+    GITHUB_BRAIN_EXISTS=true
+    GITHUB_BRAIN_REPO=$(ask_input "GitHub repo URL" "")
+
+    if [[ -n "$GITHUB_BRAIN_REPO" ]]; then
+      info "Cloning into $VAULT_PATH..."
+      if [[ -d "$VAULT_PATH/.git" ]]; then
+        success "Vault already has git — pulling latest"
+        git -C "$VAULT_PATH" pull --rebase --autostash 2>/dev/null || warn "Pull failed — check manually"
+      else
+        git clone "$GITHUB_BRAIN_REPO" "$VAULT_PATH" 2>/dev/null && success "Cloned successfully" || warn "Clone failed — check URL and auth"
+      fi
+    fi
+  else
+    GITHUB_BRAIN_EXISTS=false
+    local repo_name
+    repo_name=$(ask_input "Repo name for your brain" "brain")
+
+    # Init git in vault
+    if [[ ! -d "$VAULT_PATH/.git" ]]; then
+      git -C "$VAULT_PATH" init -b main 2>/dev/null
+      success "Git initialized in vault"
+    fi
+
+    # Create .gitignore
+    cat > "${VAULT_PATH}/.gitignore" <<'GITIGNORE'
+# Obsidian workspace (machine-specific)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/appearance.json
+.obsidian/hotkeys.json
+
+# System
+.DS_Store
+.trash/
+
+# Temp files
+*.tmp
+*.lock
+conflict-files-obsidian-git.md
+GITIGNORE
+    success ".gitignore created"
+
+    # Optional git-crypt
+    if ask_yn "Encrypt sensitive folders with git-crypt?" "n"; then
+      FEAT_GIT_CRYPT=true
+      if command -v git-crypt &>/dev/null; then
+        git -C "$VAULT_PATH" crypt init 2>/dev/null
+        cat > "${VAULT_PATH}/.gitattributes" <<'GCRYPT'
+emails/** filter=git-crypt diff=git-crypt
+claude-web/** filter=git-crypt diff=git-crypt
+memory/** filter=git-crypt diff=git-crypt
+claude-memory/** filter=git-crypt diff=git-crypt
+GCRYPT
+        success "git-crypt configured for emails, claude-web, memory folders"
+      else
+        warn "git-crypt not installed — run: brew install git-crypt"
+      fi
+    fi
+
+    # Create repo and push
+    if ask_yn "Create private GitHub repo and push?" "y"; then
+      "$gh_bin" repo create "$repo_name" --private --source "$VAULT_PATH" --push 2>/dev/null \
+        && success "Created and pushed to GitHub" \
+        || warn "Repo creation failed — create manually: gh repo create $repo_name --private"
+      GITHUB_BRAIN_REPO=$("$gh_bin" repo view "$repo_name" --json url -q .url 2>/dev/null || echo "")
+    fi
+  fi
+
+  # Set up auto-sync via launchd
+  echo ""
+  if ask_yn "Set up automatic sync every 10 minutes?" "y"; then
+    local plist_path="$HOME/Library/LaunchAgents/com.openclaw.vault-sync.plist"
+    local sync_script="$HOME/.openclaw/vault-sync.sh"
+
+    mkdir -p "$HOME/.openclaw"
+
+    cat > "$sync_script" <<SYNC
+#!/usr/bin/env bash
+cd "$VAULT_PATH" || exit 1
+git pull --rebase --autostash 2>/dev/null
+git add -A
+git diff --cached --quiet || git commit -m "auto: \$(date +%Y-%m-%d\ %H:%M)" 2>/dev/null
+git push 2>/dev/null
+SYNC
+    chmod +x "$sync_script"
+
+    cat > "$plist_path" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.vault-sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>${sync_script}</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/vault-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/vault-sync-error.log</string>
+</dict>
+</plist>
+PLIST
+
+    if ask_yn "Load the sync agent now?" "y"; then
+      launchctl load "$plist_path" 2>/dev/null && success "Auto-sync loaded (every 10 min)" || warn "launchctl load failed"
+    else
+      info "Load later: launchctl load $plist_path"
+    fi
+  fi
+
+  success "GitHub backup configured"
+}
+
 # ── Generate openclaw.json ───────────────────────────────────────────────────
 generate_config() {
   header "Generating Configuration"
@@ -1689,6 +2226,59 @@ SK
 )
   fi
 
+  # Plugins block (Mem0, Cognee)
+  local plugins_block=""
+  if [[ "$FEAT_MEM0" == "true" || "$FEAT_COGNEE" == "true" ]]; then
+    local plugin_entries=()
+    if [[ "$FEAT_MEM0" == "true" ]]; then
+      plugin_entries+=("$(cat <<PLG
+    "mem0": {
+      "enabled": true,
+      "endpoint": "http://localhost:8080"
+    }
+PLG
+)")
+    fi
+    if [[ "$FEAT_COGNEE" == "true" ]]; then
+      plugin_entries+=("$(cat <<PLG
+    "cognee": {
+      "enabled": true,
+      "endpoint": "http://localhost:8000"
+    }
+PLG
+)")
+    fi
+    local plugins_inner
+    plugins_inner=$(IFS=','; echo "${plugin_entries[*]}")
+    plugins_block=$(cat <<PLGBLOCK
+  "plugins": {
+${plugins_inner}
+  },
+PLGBLOCK
+)
+  fi
+
+  # Session block with v3 memory flush and compaction
+  local session_block
+  session_block=$(cat <<SESS
+  "session": {
+    "contextPruning": {
+      "mode": "cache-ttl",
+      "cacheTtl": "6h",
+      "keepLastAssistantMessages": 3
+    },
+    "memoryFlush": {
+      "enabled": true,
+      "softThresholdTokens": 40000
+    },
+    "compaction": {
+      "distillToMemory": true,
+      "memoryFilePattern": "memory/daily-{date}.md"
+    }
+  },
+SESS
+)
+
   # ── Assemble final config ──────────────────────────────────────────────────
   local config
   config=$(cat <<CONFIG
@@ -1699,6 +2289,7 @@ SK
     "defaults": {
       "model": "${agents_model}",
       "maxConcurrent": 3,
+$( [[ "$FEAT_OBSIDIAN_VAULT" == "true" && -n "$VAULT_PATH" ]] && echo "      \"workspace\": \"${VAULT_PATH}\"," )
 ${sandbox_block}
     }
   },
@@ -1728,13 +2319,9 @@ ${talk_block}
 
 ${gateway_block}
 
-  "session": {
-    "contextPruning": {
-      "mode": "cache-ttl",
-      "cacheTtl": "6h",
-      "keepLastAssistantMessages": 3
-    }
-  },
+${plugins_block}
+
+${session_block}
 
   "logging": {
     "redact": true
@@ -1798,12 +2385,50 @@ except json.JSONDecodeError as e:
 
   # Create workspace README
   if [[ ! -f "${WORKSPACE_DIR}/AGENTS.md" ]]; then
-    cat > "${WORKSPACE_DIR}/AGENTS.md" <<'AGENTS'
+    if [[ "$FEAT_TAG_TAXONOMY" == "true" ]]; then
+      cat > "${WORKSPACE_DIR}/AGENTS.md" <<AGENTS
+# Agent Instructions
+
+You are a helpful personal AI assistant. Be concise and direct.
+Follow the user's instructions carefully.
+
+## Knowledge & Memory
+
+This workspace uses a unified Obsidian vault as the single source of truth.
+
+### Tagging Rules
+
+When saving to memory, always add YAML frontmatter with tags from the taxonomy
+defined in _taxonomy.md. Example:
+
+\`\`\`yaml
+---
+tags:
+  - "#work"
+  - "#type/memory"
+  - "#source/openclaw"
+date: $(date +%Y-%m-%d)
+---
+\`\`\`
+
+- Use life-area tags (e.g. \`#work\`, \`#personal\`) from _taxonomy.md
+- Always add a \`#type/\` tag (meeting, email, conversation, note, memory, daily)
+- Always add a \`#source/\` tag (claude-web, claude-code, granola, gmail, openclaw, manual)
+- For project-related content, add \`#project/name\` from _taxonomy.md
+- Refer to _taxonomy.md at the vault root for the full list of approved tags
+
+### Memory File Pattern
+
+Daily distills are written to: memory/daily-{date}.md
+AGENTS
+    else
+      cat > "${WORKSPACE_DIR}/AGENTS.md" <<'AGENTS'
 # Agent Instructions
 
 You are a helpful personal AI assistant. Be concise and direct.
 Follow the user's instructions carefully.
 AGENTS
+    fi
   fi
 
   success "Workspace initialized at ${WORKSPACE_DIR}"
@@ -1828,6 +2453,12 @@ generate_docker_compose() {
   if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
     mkdir -p "${INSTANCE_DIR}/google-credentials"
     gog_volume="      - ${INSTANCE_DIR}/google-credentials:/home/node/.config/gogcli"
+  fi
+
+  # Obsidian vault volume
+  local vault_volume=""
+  if [[ "$FEAT_OBSIDIAN_VAULT" == "true" && -n "$VAULT_PATH" ]]; then
+    vault_volume="      - ${VAULT_PATH}:/home/node/openclaw/vault"
   fi
 
   # Ask about backup
@@ -1908,6 +2539,7 @@ $( [[ -z "$network_mode" ]] && echo "    ports:" && echo "      - \"${GATEWAY_PO
       - ${WORKSPACE_DIR}:/home/node/openclaw/workspace
 ${chrome_volume}
 ${gog_volume}
+${vault_volume}
     environment:
       - OLLAMA_HOST=${OLLAMA_HOST}
       - OPENCLAW_GATEWAY_BIND=0.0.0.0
@@ -2216,6 +2848,12 @@ print_summary() {
     "FEAT_MESSAGING:Messaging" "FEAT_VOICE:Voice" "FEAT_CLAUDE_CODE:Claude Code"
     "FEAT_BACKUP:Backup"
     "FEAT_GOOGLE_WORKSPACE:Google Workspace"
+    "FEAT_OBSIDIAN_VAULT:Obsidian Vault" "FEAT_CLAUDE_SYNC:Claude Sync"
+    "FEAT_TAG_TAXONOMY:Tag Taxonomy" "FEAT_GITHUB_BACKUP:GitHub Backup"
+    "FEAT_MEM0:Mem0" "FEAT_COGNEE:Cognee"
+    "FEAT_SKILLS_PRODUCTIVITY:Skills:Productivity" "FEAT_SKILLS_SOCIAL:Skills:Social"
+    "FEAT_SKILLS_RESEARCH:Skills:Research" "FEAT_SKILLS_SECURITY:Skills:Security"
+    "FEAT_SKILLS_COMMS:Skills:Comms" "FEAT_GRANOLA:Granola"
   )
   for f in "${feats[@]}"; do
     IFS=':' read -r var label <<< "$f"
@@ -2251,28 +2889,104 @@ print_summary() {
 
   echo ""
   echo -e "${BOLD}Credentials:${NC}"
-  [[ -n "$ANTHROPIC_API_KEY" ]]  && echo -e "  ${GREEN}[OK]${NC}  Anthropic API key stored"
-  [[ -n "$OPENAI_API_KEY" ]]     && echo -e "  ${GREEN}[OK]${NC}  OpenAI API key stored"
-  [[ -n "$OPENROUTER_API_KEY" ]] && echo -e "  ${GREEN}[OK]${NC}  OpenRouter API key stored"
-  [[ -n "$GOOGLE_API_KEY" ]]     && echo -e "  ${GREEN}[OK]${NC}  Google API key stored"
-  [[ -n "$GROQ_API_KEY" ]]       && echo -e "  ${GREEN}[OK]${NC}  Groq API key stored"
-  [[ "$MODEL_PROVIDER" == "ollama-cloud" || "$MODEL_PROVIDER" == "ollama-local" ]] && echo -e "  ${GREEN}[OK]${NC}  Ollama (no key needed)"
+  if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+    echo -e "  ${GREEN}[OK]${NC}  Anthropic API key stored"
+  fi
+  if [[ -n "$OPENAI_API_KEY" ]]; then
+    echo -e "  ${GREEN}[OK]${NC}  OpenAI API key stored"
+  fi
+  if [[ -n "$OPENROUTER_API_KEY" ]]; then
+    echo -e "  ${GREEN}[OK]${NC}  OpenRouter API key stored"
+  fi
+  if [[ -n "$GOOGLE_API_KEY" ]]; then
+    echo -e "  ${GREEN}[OK]${NC}  Google API key stored"
+  fi
+  if [[ -n "$GROQ_API_KEY" ]]; then
+    echo -e "  ${GREEN}[OK]${NC}  Groq API key stored"
+  fi
+  if [[ "$MODEL_PROVIDER" == "ollama-cloud" || "$MODEL_PROVIDER" == "ollama-local" ]]; then
+    echo -e "  ${GREEN}[OK]${NC}  Ollama (no key needed)"
+  fi
   echo ""
+
+  # v3: Unified Brain summary
+  if [[ "$FEAT_OBSIDIAN_VAULT" == "true" ]]; then
+    echo -e "${BOLD}Unified Brain:${NC}"
+    if [[ -n "$VAULT_PATH" ]]; then
+      echo -e "  ${GREEN}[OK]${NC}  Vault: $VAULT_PATH"
+    fi
+    if [[ "$FEAT_TAG_TAXONOMY" == "true" ]]; then
+      echo -e "  ${GREEN}[OK]${NC}  Tag taxonomy: ${VAULT_PATH}/_taxonomy.md"
+    fi
+    if [[ -n "$GITHUB_BRAIN_REPO" ]]; then
+      echo -e "  ${GREEN}[OK]${NC}  GitHub backup: $GITHUB_BRAIN_REPO"
+    fi
+    if [[ "$FEAT_GIT_CRYPT" == "true" ]]; then
+      echo -e "  ${GREEN}[OK]${NC}  git-crypt encryption enabled"
+    fi
+    if [[ "$FEAT_CLAUDE_SYNC" == "true" ]]; then
+      if [[ "$CLAUDE_RETENTION_FIXED" == "true" ]]; then
+        echo -e "  ${GREEN}[OK]${NC}  Claude session retention: unlimited"
+      fi
+    fi
+    echo ""
+  fi
+
+  # v3: Skills summary
+  local skills_count=0
+  if [[ "$FEAT_SKILLS_PRODUCTIVITY" == "true" ]]; then
+    if [[ "$DEPLOY_MODE" == "native" ]]; then
+      skills_count=$((skills_count + 5))
+    else
+      skills_count=$((skills_count + 4))
+    fi
+  fi
+  if [[ "$FEAT_SKILLS_SOCIAL" == "true" ]]; then skills_count=$((skills_count + 3)); fi
+  if [[ "$FEAT_SKILLS_RESEARCH" == "true" ]]; then skills_count=$((skills_count + 1)); fi
+  if [[ "$FEAT_SKILLS_SECURITY" == "true" ]]; then skills_count=$((skills_count + 1)); fi
+  if [[ "$FEAT_SKILLS_COMMS" == "true" ]]; then skills_count=$((skills_count + 2)); fi
+  if [[ "$FEAT_GRANOLA" == "true" ]]; then skills_count=$((skills_count + 1)); fi
+
+  if [[ $skills_count -gt 0 ]]; then
+    echo -e "${BOLD}Skills:${NC}       ${skills_count} skills configured"
+    echo ""
+  fi
+
+  # v3: Memory plugins summary
+  if [[ "$FEAT_MEM0" == "true" || "$FEAT_COGNEE" == "true" ]]; then
+    echo -e "${BOLD}Memory Plugins:${NC}"
+    if [[ "$FEAT_MEM0" == "true" ]]; then
+      echo -e "  ${GREEN}[ON]${NC}  Mem0 (endpoint: http://localhost:8080)"
+    fi
+    if [[ "$FEAT_COGNEE" == "true" ]]; then
+      echo -e "  ${GREEN}[ON]${NC}  Cognee (endpoint: http://localhost:8000)"
+    fi
+    echo ""
+  fi
 
   echo -e "${BOLD}Next Steps:${NC}"
   if [[ "$DEPLOY_MODE" == "native" ]]; then
     echo "  1. Review config:  cat ${CONFIG_DIR}/openclaw.json"
     echo "  2. Start:          openclaw"
     echo "  3. Open UI:        http://localhost:${GATEWAY_PORT}"
-    [[ "$CH_WHATSAPP" == "true" ]] && echo "  4. WhatsApp pair:  openclaw channels login whatsapp"
-    [[ "$CH_SIGNAL" == "true" ]]   && echo "  5. Signal pair:    openclaw channels login signal"
+    if [[ "$CH_WHATSAPP" == "true" ]]; then
+      echo "  4. WhatsApp pair:  openclaw channels login whatsapp"
+    fi
+    if [[ "$CH_SIGNAL" == "true" ]]; then
+      echo "  5. Signal pair:    openclaw channels login signal"
+    fi
   else
     echo "  1. Review config:  cat ${CONFIG_DIR}/openclaw.json"
     echo "  2. Edit .env:      vim ${INSTANCE_DIR}/.env  (add Tailscale key)"
     echo "  3. Start:          cd ${INSTANCE_DIR} && docker compose up -d"
     echo "  4. View logs:      docker compose logs -f openclaw-${INSTANCE_NAME}"
     echo "  5. Open UI:        http://localhost:${GATEWAY_PORT}"
-    [[ "$CH_WHATSAPP" == "true" ]] && echo "  6. WhatsApp pair:  docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
+    if [[ "$CH_WHATSAPP" == "true" ]]; then
+      echo "  6. WhatsApp pair:  docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
+    fi
+    if [[ "$FEAT_OBSIDIAN_VAULT" == "true" && -n "$VAULT_PATH" ]]; then
+      echo "  7. Vault mounted:  $VAULT_PATH → /home/node/openclaw/vault"
+    fi
   fi
   if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
     echo ""
@@ -2318,6 +3032,12 @@ main() {
   setup_channels
   setup_models
   setup_google_workspace
+  setup_obsidian_vault
+  setup_tag_taxonomy
+  setup_claude_sync
+  setup_skills
+  setup_memory_config
+  setup_github_backup
   generate_config
 
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
