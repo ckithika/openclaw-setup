@@ -18,6 +18,17 @@ jobs:
       - name: ShellCheck
         run: shellcheck setup.sh --severity=warning --exclude=SC2034,SC2155
 
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: brew install bats-core
+
+      - name: Run tests
+        run: bats test/
+
   version-check:
     runs-on: ubuntu-latest
     steps:
