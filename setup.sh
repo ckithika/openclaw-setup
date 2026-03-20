@@ -276,7 +276,7 @@ INSTANCE_DIR=""
 CONFIG_DIR=""
 WORKSPACE_DIR=""
 GATEWAY_PORT=18789
-OLLAMA_HOST="http://host.docker.internal:11434"
+OLLAMA_HOST="http://localhost:11434"
 
 # Feature Toggles (defaults)
 FEAT_BROWSER=true
@@ -2242,21 +2242,12 @@ TALK
 GW
 )
 
-  # Sandbox docker config
+  # Sandbox config — only "mode" is recognized by the image; backend/docker sub-keys are not
   local sandbox_block
   if [[ "$FEAT_SANDBOX" == "true" ]]; then
     sandbox_block=$(cat <<SB
     "sandbox": {
-      "mode": "${sandbox_mode}",
-      "backend": "docker",
-      "scope": "session",
-      "docker": {
-        "readOnlyRoot": true,
-        "network": "bridge",
-        "capDrop": ["ALL"],
-        "memory": "2g",
-        "cpus": "2"
-      }
+      "mode": "${sandbox_mode}"
     }
 SB
 )
@@ -2684,7 +2675,9 @@ BACKUP
   local USE_HOST_NETWORK=false
   if ask_yn "Use host network mode? (recommended for OrbStack on macOS)" "n"; then
     USE_HOST_NETWORK=true
-    OLLAMA_HOST="http://localhost:11434"
+  else
+    # Bridged mode needs host.docker.internal to reach host services
+    OLLAMA_HOST="http://host.docker.internal:11434"
   fi
 
   # Healthcheck port — matches gateway config; with host networking, use the configured port
