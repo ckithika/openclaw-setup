@@ -3086,28 +3086,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
 "
   fi
 
-  # CLI tool selection
+  # CLI tool selection — skip for personal-assistant preset (no dev tools needed)
   local INSTALL_GH=false INSTALL_DOCTL=false INSTALL_SUPABASE=false INSTALL_GOG=false INSTALL_XURL=false
 
-  echo ""
-  echo -e "  ${BOLD}CLI Tools for Docker Instance${NC}"
-  echo -e "  Select tools to install in the container image.\n"
-
-  if ask_yn "Install GitHub CLI (gh)? — repo management, PRs, issues" "n"; then
-    INSTALL_GH=true
-  fi
-  if ask_yn "Install DigitalOcean CLI (doctl)? — infrastructure management" "n"; then
-    INSTALL_DOCTL=true
-  fi
-  if ask_yn "Install Supabase CLI? — database management" "n"; then
-    INSTALL_SUPABASE=true
-  fi
+  # gog is always installed if Google Workspace is enabled
   if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
     INSTALL_GOG=true
-    info "gog CLI will be installed (required for Google Workspace)"
+    needs_dockerfile=true
   fi
-  if ask_yn "Install xurl (Twitter/X CLI)? — social media posting" "n"; then
-    INSTALL_XURL=true
+
+  if [[ "$PRESET_NAME" != "personal-assistant" ]]; then
+    echo ""
+    echo -e "  ${BOLD}CLI Tools for Docker Instance${NC}"
+    echo -e "  Select tools to install in the container image.\n"
+
+    if ask_yn "Install GitHub CLI (gh)? — repo management, PRs, issues" "n"; then
+      INSTALL_GH=true
+    fi
+    if ask_yn "Install DigitalOcean CLI (doctl)? — infrastructure management" "n"; then
+      INSTALL_DOCTL=true
+    fi
+    if ask_yn "Install Supabase CLI? — database management" "n"; then
+      INSTALL_SUPABASE=true
+    fi
+    if ask_yn "Install xurl (Twitter/X CLI)? — social media posting" "n"; then
+      INSTALL_XURL=true
+    fi
+  else
+    if [[ "$INSTALL_GOG" == "true" ]]; then
+      info "gog CLI will be installed (required for Google Workspace)"
+    fi
   fi
 
   # Generate Dockerfile blocks for selected tools
