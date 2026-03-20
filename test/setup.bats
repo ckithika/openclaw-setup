@@ -235,7 +235,7 @@ teardown() {
   [[ "$model" == ollama/* ]]
 }
 
-@test "native config has memoryFlush set to 40000" {
+@test "native config has no unsupported session keys" {
   printf '%s\n' \
     "1" "testinstance" \
     "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
@@ -244,9 +244,16 @@ teardown() {
     "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
 
-  local threshold
-  threshold=$(python3 -c "import json; c=json.load(open('$TEST_DIR/.openclaw/openclaw.json')); print(c['session']['memoryFlush']['softThresholdTokens'])" 2>/dev/null)
-  [ "$threshold" -eq 40000 ]
+  # Ensure unsupported keys (contextPruning, memoryFlush, compaction) are not present
+  local bad_keys
+  bad_keys=$(python3 -c "
+import json, sys
+c=json.load(open('$TEST_DIR/.openclaw/openclaw.json'))
+s=c.get('session',{})
+bad=[k for k in ('contextPruning','memoryFlush','compaction') if k in s]
+print(','.join(bad) if bad else 'clean')
+" 2>/dev/null)
+  [ "$bad_keys" = "clean" ]
 }
 
 @test "credentials directory has chmod 700" {

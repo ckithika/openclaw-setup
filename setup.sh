@@ -399,24 +399,39 @@ preflight() {
     warn "Docker not found — needed for Docker instances and sandboxing"
   fi
 
-  # Check Node.js
-  if command -v node &>/dev/null; then
-    success "Node.js $(node --version) found"
-  else
-    warn "Node.js not found — required for native install"
-  fi
-
-  # Check jq
-  if ! command -v jq &>/dev/null; then
-    warn "jq not found — installing via Homebrew"
-    if command -v brew &>/dev/null; then
-      brew install jq --quiet
+  # Check Node.js (native only — Docker image includes it)
+  if [[ "$DEPLOY_MODE" != "docker" ]]; then
+    if command -v node &>/dev/null; then
+      success "Node.js $(node --version) found"
     else
-      die "jq is required but Homebrew is not available to install it"
+      warn "Node.js not found — required for native install"
     fi
   fi
 
-  # Check available RAM
+  # Check jq (native only — Docker image includes it)
+  if [[ "$DEPLOY_MODE" != "docker" ]]; then
+    if ! command -v jq &>/dev/null; then
+      warn "jq not found — installing via Homebrew"
+      if command -v brew &>/dev/null; then
+        brew install jq --quiet
+      else
+        die "jq is required but Homebrew is not available to install it"
+      fi
+    fi
+  else
+    # Ensure jq is available on the host for config generation
+    if ! command -v jq &>/dev/null; then
+      if command -v brew &>/dev/null; then
+        brew install jq --quiet
+      elif command -v apt-get &>/dev/null; then
+        sudo apt-get install -y jq 2>/dev/null || die "jq is required — install it manually"
+      else
+        die "jq is required — install it manually"
+      fi
+    fi
+  fi
+
+  # Check available RAM (macOS native only)
   if [[ "$(uname)" == "Darwin" ]]; then
     local ram_gb
     ram_gb=$(( $(sysctl -n hw.memsize) / 1073741824 ))
@@ -426,9 +441,13 @@ preflight() {
     fi
   fi
 
-  # Check disk space
+  # Check disk space (portable)
   local avail_gb
-  avail_gb=$(df -g / | awk 'NR==2 {print $4}')
+  if [[ "$(uname)" == "Darwin" ]]; then
+    avail_gb=$(df -g / | awk 'NR==2 {print $4}')
+  else
+    avail_gb=$(df -BG / | awk 'NR==2 {print $4}' | tr -d 'G')
+  fi
   info "Disk: ${avail_gb}GB available"
   if (( avail_gb < 20 )); then
     warn "Low disk space — at least 20GB recommended"
@@ -518,7 +537,7 @@ load_existing_config() {
   [[ -n "$(has_tool "cron")" ]]          && FEAT_CRON=true         || FEAT_CRON=false
 
   # Restore channel states
-  CH_WEBCHAT=$(echo "$cfg"  | jq -r '.channels.webchat.enabled // false' 2>/dev/null)
+  # webchat is auto-detected by the image — no config needed
   CH_TELEGRAM=$(echo "$cfg" | jq -r '.channels.telegram.enabled // false' 2>/dev/null)
   CH_WHATSAPP=$(echo "$cfg" | jq -r '.channels.whatsapp.enabled // false' 2>/dev/null)
   CH_DISCORD=$(echo "$cfg"  | jq -r '.channels.discord.enabled // false' 2>/dev/null)
@@ -618,7 +637,14 @@ toggle_features() {
 
   local features=(
     "FEAT_BROWSER:Browser automation (Chromium CDP):$FEAT_BROWSER"
-    "FEAT_SANDBOX:Sandbox (Docker-based tool isolation):$FEAT_SANDBOX"
+  )
+
+  # Sandbox toggle only for native — Docker is already sandboxed
+  if [[ "$DEPLOY_MODE" != "docker" ]]; then
+    features+=("FEAT_SANDBOX:Sandbox (Docker-based tool isolation):$FEAT_SANDBOX")
+  fi
+
+  features+=(
     "FEAT_CRON:Cron jobs (scheduled tasks):$FEAT_CRON"
     "FEAT_MEMORY:Persistent memory (cross-session):$FEAT_MEMORY"
     "FEAT_SKILLS:Skills marketplace (ClawHub):$FEAT_SKILLS"
@@ -628,13 +654,27 @@ toggle_features() {
     "FEAT_FILE_ACCESS:File read/write access:$FEAT_FILE_ACCESS"
     "FEAT_SHELL_EXEC:Shell command execution:$FEAT_SHELL_EXEC"
     "FEAT_MESSAGING:Cross-session messaging:$FEAT_MESSAGING"
-    "FEAT_VOICE:Voice/TTS (macOS native only):$FEAT_VOICE"
+  )
+
+  # Voice only for native — not available in Docker
+  if [[ "$DEPLOY_MODE" != "docker" ]]; then
+    features+=("FEAT_VOICE:Voice/TTS (macOS native only):$FEAT_VOICE")
+  fi
+
+  features+=(
     "FEAT_CLAUDE_CODE:Claude Code integration (ACP):$FEAT_CLAUDE_CODE"
     "FEAT_GOOGLE_WORKSPACE:Google Workspace (Gmail, Calendar, Drive):$FEAT_GOOGLE_WORKSPACE"
     "FEAT_OBSIDIAN_VAULT:Obsidian unified brain (single source of truth):$FEAT_OBSIDIAN_VAULT"
-    "FEAT_CLAUDE_SYNC:Claude knowledge sync (web + Code sessions):$FEAT_CLAUDE_SYNC"
+  )
+
+  # Claude Sync: session retention + symlinks are native-only
+  if [[ "$DEPLOY_MODE" != "docker" ]]; then
+    features+=("FEAT_CLAUDE_SYNC:Claude knowledge sync (web + Code sessions):$FEAT_CLAUDE_SYNC")
+  fi
+
+  features+=(
     "FEAT_TAG_TAXONOMY:Auto-tagging taxonomy system:$FEAT_TAG_TAXONOMY"
-    "FEAT_GITHUB_BACKUP:GitHub private repo backup + multi-Mac sync:$FEAT_GITHUB_BACKUP"
+    "FEAT_GITHUB_BACKUP:GitHub private repo backup + sync:$FEAT_GITHUB_BACKUP"
     "FEAT_MEM0:Mem0 external memory (survives compaction):$FEAT_MEM0"
     "FEAT_COGNEE:Cognee knowledge graph (relationship search):$FEAT_COGNEE"
     "FEAT_SKILLS_PRODUCTIVITY:Skills: GitHub, Obsidian, Notion, Summarize:$FEAT_SKILLS_PRODUCTIVITY"
@@ -667,12 +707,17 @@ toggle_features() {
     fi
   done
 
-  # Docker-specific: disable voice and iMessage
+  # Docker-specific overrides
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
     if [[ "$FEAT_VOICE" == "true" ]]; then
       warn "Voice/TTS disabled — not available in Docker containers"
       FEAT_VOICE=false
     fi
+    # Sandbox is redundant in Docker — the agent is already containerized
+    if [[ "$FEAT_SANDBOX" == "true" ]]; then
+      info "Sandbox auto-enabled — agent is already running in a Docker container"
+    fi
+    FEAT_SANDBOX=true
   fi
 
   echo ""
@@ -1362,6 +1407,13 @@ setup_tag_taxonomy() {
 setup_claude_sync() {
   [[ "$FEAT_CLAUDE_SYNC" != "true" ]] && return
 
+  # Docker cannot access the host's Claude Code session files or settings
+  if [[ "$DEPLOY_MODE" == "docker" ]]; then
+    info "Claude Sync skipped — session retention and symlinks require native macOS access"
+    info "To sync Claude conversations into a Docker instance, use claude-vault with a mounted vault volume"
+    return
+  fi
+
   header "Claude Knowledge Sync"
 
   echo -e "  ${CYAN}Sync all Claude conversations into your unified brain.${NC}"
@@ -1432,13 +1484,11 @@ print('done')
   echo "    claude-extract --output ${VAULT_PATH:-~/obsidian-vault}/claude-code/ --format markdown"
   echo ""
 
-  if [[ "$DEPLOY_MODE" == "native" ]]; then
-    if ask_yn "Install Claude Vault now (pip)?" "n"; then
-      pip3 install claude-vault 2>/dev/null && success "Claude Vault installed" || warn "Install failed — run later: pip install claude-vault"
-    fi
-    if ask_yn "Install Claude Conversation Extractor now (pip)?" "n"; then
-      pip3 install claude-conversation-extractor 2>/dev/null && success "Claude Extractor installed" || warn "Install failed — run later: pip install claude-conversation-extractor"
-    fi
+  if ask_yn "Install Claude Vault now (pip)?" "n"; then
+    pip3 install claude-vault 2>/dev/null && success "Claude Vault installed" || warn "Install failed — run later: pip install claude-vault"
+  fi
+  if ask_yn "Install Claude Conversation Extractor now (pip)?" "n"; then
+    pip3 install claude-conversation-extractor 2>/dev/null && success "Claude Extractor installed" || warn "Install failed — run later: pip install claude-conversation-extractor"
   fi
 
   success "Claude sync configured"
@@ -1670,15 +1720,31 @@ GCRYPT
     fi
   fi
 
-  # Set up auto-sync via launchd
+  # Set up auto-sync
   echo ""
   if ask_yn "Set up automatic sync every 10 minutes?" "y"; then
-    local plist_path="$HOME/Library/LaunchAgents/com.openclaw.vault-sync.plist"
-    local sync_script="$HOME/.openclaw/vault-sync.sh"
+    if [[ "$DEPLOY_MODE" == "docker" ]]; then
+      # Docker: use OpenClaw's built-in cron for vault sync
+      local cron_dir="${CONFIG_DIR}/cron"
+      mkdir -p "$cron_dir"
+      cat > "${cron_dir}/vault-sync.json" <<CRONSYNC
+{
+  "name": "vault-sync",
+  "schedule": "*/10 * * * *",
+  "command": "cd /home/node/openclaw/vault && git pull --rebase --autostash 2>/dev/null; git add -A; git diff --cached --quiet || git commit -m 'auto: \$(date +%Y-%m-%d\\ %H:%M)'; git push 2>/dev/null",
+  "enabled": true
+}
+CRONSYNC
+      success "Vault sync cron configured (every 10 min inside container)"
+      info "Requires git credentials mounted in the container (SSH key or token)"
+    else
+      # Native: use macOS launchd
+      local plist_path="$HOME/Library/LaunchAgents/com.openclaw.vault-sync.plist"
+      local sync_script="$HOME/.openclaw/vault-sync.sh"
 
-    mkdir -p "$HOME/.openclaw"
+      mkdir -p "$HOME/.openclaw"
 
-    cat > "$sync_script" <<SYNC
+      cat > "$sync_script" <<SYNC
 #!/usr/bin/env bash
 cd "$VAULT_PATH" || exit 1
 git pull --rebase --autostash 2>/dev/null
@@ -1686,9 +1752,9 @@ git add -A
 git diff --cached --quiet || git commit -m "auto: \$(date +%Y-%m-%d\ %H:%M)" 2>/dev/null
 git push 2>/dev/null
 SYNC
-    chmod +x "$sync_script"
+      chmod +x "$sync_script"
 
-    cat > "$plist_path" <<PLIST
+      cat > "$plist_path" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -1712,10 +1778,11 @@ SYNC
 </plist>
 PLIST
 
-    if ask_yn "Load the sync agent now?" "y"; then
-      launchctl load "$plist_path" 2>/dev/null && success "Auto-sync loaded (every 10 min)" || warn "launchctl load failed"
-    else
-      info "Load later: launchctl load $plist_path"
+      if ask_yn "Load the sync agent now?" "y"; then
+        launchctl load "$plist_path" 2>/dev/null && success "Auto-sync loaded (every 10 min)" || warn "launchctl load failed"
+      else
+        info "Load later: launchctl load $plist_path"
+      fi
     fi
   fi
 
@@ -2003,14 +2070,7 @@ AUTH
   local channels_block=""
   local ch_entries=()
 
-  if [[ "$CH_WEBCHAT" == "true" ]]; then
-    ch_entries+=("$(cat <<CH
-    "webchat": {
-      "enabled": true
-    }
-CH
-)")
-  fi
+  # webchat is auto-detected by the OpenClaw image; do not generate a config block
 
   if [[ "$CH_TELEGRAM" == "true" ]]; then
     local tg_token_val="${TELEGRAM_BOT_TOKEN:-YOUR_TELEGRAM_BOT_TOKEN}"
@@ -2021,7 +2081,7 @@ CH
         "default": {
           "botToken": "${tg_token_val}",
           "dmPolicy": "pairing",
-          "streamMode": "partial"
+          "streaming": "partial"
         }
       }
     }
@@ -2209,23 +2269,8 @@ SB
 )
   fi
 
-  # Skills config
+  # Skills config — skills are managed via tools allow/deny lists, not a separate block
   local skills_block=""
-  if [[ "$FEAT_SKILLS" == "true" ]]; then
-    skills_block=$(cat <<SK
-  "skills": {
-    "enabled": true
-  },
-SK
-)
-  else
-    skills_block=$(cat <<SK
-  "skills": {
-    "enabled": false
-  },
-SK
-)
-  fi
 
   # Plugins block (Mem0, Cognee)
   local plugins_block=""
@@ -2259,26 +2304,8 @@ PLGBLOCK
 )
   fi
 
-  # Session block with v3 memory flush and compaction
-  local session_block
-  session_block=$(cat <<SESS
-  "session": {
-    "contextPruning": {
-      "mode": "cache-ttl",
-      "cacheTtl": "6h",
-      "keepLastAssistantMessages": 3
-    },
-    "memoryFlush": {
-      "enabled": true,
-      "softThresholdTokens": 40000
-    },
-    "compaction": {
-      "distillToMemory": true,
-      "memoryFilePattern": "memory/daily-{date}.md"
-    }
-  },
-SESS
-)
+  # Session block — contextPruning, memoryFlush, compaction are not supported by the image
+  local session_block=""
 
   # ── Assemble final config ──────────────────────────────────────────────────
   local config
@@ -2324,9 +2351,7 @@ ${plugins_block}
 
 ${session_block}
 
-  "logging": {
-    "redact": true
-  }
+  "logging": {}
 }
 CONFIG
 )
@@ -2442,10 +2467,9 @@ generate_docker_compose() {
   header "Generating Docker Compose"
 
   local chrome_volume=""
-  local shm_size=""
+  local shm_size='shm_size: "2g"'  # always include — harmless without browser, prevents breakage if enabled later
 
   if [[ "$FEAT_BROWSER" == "true" ]]; then
-    shm_size='shm_size: "2g"'
     chrome_volume="      - ${INSTANCE_DIR}/chrome-profile:/home/node/.config/chromium"
   fi
 
@@ -2483,9 +2507,9 @@ generate_docker_compose() {
         echo "Starting backup cron..."
         while true; do
           sleep 86400
-          backup_name="openclaw-${INSTANCE_NAME}-\$(date +%Y%m%d-%H%M%S).tar.gz"
-          tar czf "/backups/\$backup_name" -C /source .
-          echo "Backup created: \$backup_name"
+          backup_name="openclaw-${INSTANCE_NAME}-\$\$(date +%Y%m%d-%H%M%S).tar.gz"
+          tar czf "/backups/\$\$backup_name" -C /source .
+          echo "Backup created: \$\$backup_name"
           find /backups -name "openclaw-${INSTANCE_NAME}-*.tar.gz" -mtime +7 -delete
           echo "Old backups pruned"
         done
@@ -2495,10 +2519,22 @@ BACKUP
     success "Backup service enabled (daily at 3 AM, 7-day retention)"
   fi
 
+  # Network mode — host networking avoids OrbStack/macOS bridged network issues
+  local USE_HOST_NETWORK=false
+  if [[ -z "$network_mode" ]]; then
+    if ask_yn "Use host network mode? (recommended for OrbStack on macOS)" "n"; then
+      USE_HOST_NETWORK=true
+      OLLAMA_HOST="http://localhost:11434"
+    fi
+  fi
+
   # Tailscale sidecar
   local tailscale_service=""
   local network_mode=""
-  if ask_yn "Add Tailscale sidecar for remote access?" "y"; then
+  if [[ "$USE_HOST_NETWORK" == "true" ]]; then
+    network_mode="    network_mode: host"
+    info "Skipping Tailscale — not needed with host networking"
+  elif ask_yn "Add Tailscale sidecar for remote access?" "y"; then
     local ts_hostname
     ts_hostname=$(ask_name "Tailscale hostname for this instance" "openclaw-${INSTANCE_NAME}")
     tailscale_service=$(cat <<TS
@@ -2548,10 +2584,16 @@ ${vault_volume}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+$( [[ "$USE_HOST_NETWORK" != "true" ]] && cat <<SECBLOCK
     cap_drop:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+SECBLOCK
+)
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:18789/health"]
       interval: 30s

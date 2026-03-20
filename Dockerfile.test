@@ -1,0 +1,40 @@
+# Dockerfile for testing openclaw setup.sh in an isolated container
+# Usage:
+#   docker build -f Dockerfile.test -t openclaw-setup-test .
+#   docker run -it openclaw-setup-test              # interactive mode
+#   docker run openclaw-setup-test /test/run.sh     # automated smoke test
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies the setup script expects
+RUN apt-get update && apt-get install -y \
+    bash \
+    curl \
+    jq \
+    git \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user (matches the script's typical usage)
+RUN useradd -m -s /bin/bash testuser
+
+# Copy the setup script and test harness
+COPY setup.sh /home/testuser/setup.sh
+RUN chmod +x /home/testuser/setup.sh
+
+# Copy test files
+COPY test/ /home/testuser/test/
+RUN mkdir -p /test
+COPY docker-test.sh /test/run.sh
+RUN chmod +x /test/run.sh
+
+RUN chown -R testuser:testuser /home/testuser /test
+
+USER testuser
+WORKDIR /home/testuser
+
+# Default: drop into interactive bash so you can run setup.sh manually
+CMD ["/bin/bash"]
