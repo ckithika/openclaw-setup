@@ -269,6 +269,93 @@ ask_choice() {
   done
 }
 
+# Interactive multi-select with arrow keys and spacebar
+# Usage: multi_select "result_var" "label1:var1:val1" "label2:var2:val2" ...
+# Sets the named variables to "true" or "false" based on selection
+multi_select() {
+  local -n _result_items=$1; shift
+  local items=("$@")
+  local count=${#items[@]}
+  local cursor=0
+
+  # Parse items into parallel arrays
+  local labels=() varnames=() selected=()
+  for item in "${items[@]}"; do
+    IFS=':' read -r varname label val <<< "$item"
+    labels+=("$label")
+    varnames+=("$varname")
+    if [[ "$val" == "true" ]]; then
+      selected+=(1)
+    else
+      selected+=(0)
+    fi
+  done
+
+  # Hide cursor
+  printf '\e[?25l' >&2
+
+  # Draw initial list
+  for i in "${!labels[@]}"; do
+    local check=" "; [[ "${selected[$i]}" -eq 1 ]] && check="x"
+    local pointer="  "; [[ $i -eq $cursor ]] && pointer="${CYAN}> ${NC}"
+    printf '%b[%s] %s\n' "$pointer" "$check" "${labels[$i]}" >&2
+  done
+
+  # Input loop
+  while true; do
+    # Read a keypress
+    local key=""
+    IFS= read -rsn1 key 2>/dev/null || true
+
+    if [[ "$key" == $'\x1b' ]]; then
+      # Escape sequence — read next 2 chars
+      local seq=""
+      IFS= read -rsn2 seq 2>/dev/null || true
+      case "$seq" in
+        '[A') # Up arrow
+          (( cursor > 0 )) && (( cursor-- ))
+          ;;
+        '[B') # Down arrow
+          (( cursor < count - 1 )) && (( cursor++ ))
+          ;;
+      esac
+    elif [[ "$key" == " " ]]; then
+      # Spacebar — toggle selection
+      if [[ "${selected[$cursor]}" -eq 1 ]]; then
+        selected[$cursor]=0
+      else
+        selected[$cursor]=1
+      fi
+    elif [[ "$key" == "" ]]; then
+      # Enter — confirm
+      break
+    fi
+
+    # Redraw — move cursor up by $count lines and redraw
+    printf '\e[%dA' "$count" >&2
+    for i in "${!labels[@]}"; do
+      local check=" "; [[ "${selected[$i]}" -eq 1 ]] && check="${GREEN}x${NC}"
+      local pointer="  "; [[ $i -eq $cursor ]] && pointer="${CYAN}> ${NC}"
+      printf '\r\e[K%b[%b] %s\n' "$pointer" "$check" "${labels[$i]}" >&2
+    done
+  done
+
+  # Show cursor
+  printf '\e[?25h' >&2
+
+  # Apply selections to variables
+  for i in "${!varnames[@]}"; do
+    if [[ "${selected[$i]}" -eq 1 ]]; then
+      eval "${varnames[$i]}=true"
+    else
+      eval "${varnames[$i]}=false"
+    fi
+  done
+
+  # Set result
+  _result_items=("${selected[@]}")
+}
+
 # ── Defaults ─────────────────────────────────────────────────────────────────
 DEPLOY_MODE=""          # native | docker
 INSTANCE_NAME=""
@@ -771,7 +858,7 @@ toggle_features() {
     return
   fi
 
-  echo -e "Toggle features on/off. Press Enter to keep current value.\n"
+  echo -e "  Use ${BOLD}↑/↓${NC} to navigate, ${BOLD}Space${NC} to toggle, ${BOLD}Enter${NC} to confirm.\n"
 
   local features=(
     "FEAT_BROWSER:Browser automation (Chromium CDP):$FEAT_BROWSER"
@@ -823,27 +910,25 @@ toggle_features() {
     "FEAT_GRANOLA:Granola meeting notes sync:$FEAT_GRANOLA"
   )
 
-  for feat_line in "${features[@]}"; do
-    IFS=':' read -r var_name description current_val <<< "$feat_line"
-    local status_icon="ON "; local status_color="$GREEN"
-    if [[ "$current_val" == "false" ]]; then
-      status_icon="OFF"; status_color="$RED"
-    fi
-    printf "  ${status_color}[%s]${NC} %s" "$status_icon" "$description"
-
-    local toggle
-    read -rp " (toggle? y/N): " toggle || true
-    toggle=$(echo "$toggle" | tr '[:upper:]' '[:lower:]')
-    if [[ "$toggle" == "y" ]]; then
-      if [[ "$current_val" == "true" ]]; then
-        eval "$var_name=false"
-        echo -e "       ${RED}-> OFF${NC}"
-      else
-        eval "$var_name=true"
-        echo -e "       ${GREEN}-> ON${NC}"
+  # Check if we have a TTY for interactive multi-select
+  if [[ -t 0 ]]; then
+    local _sel_result=()
+    multi_select _sel_result "${features[@]}"
+  else
+    # Non-interactive fallback (piped input) — use old y/N style
+    for feat_line in "${features[@]}"; do
+      IFS=':' read -r var_name description current_val <<< "$feat_line"
+      local status_icon="ON "; [[ "$current_val" == "false" ]] && status_icon="OFF"
+      printf "  [%s] %s" "$status_icon" "$description" >&2
+      local toggle
+      read -r toggle || true
+      toggle=$(echo "$toggle" | tr '[:upper:]' '[:lower:]')
+      if [[ "$toggle" == "y" ]]; then
+        if [[ "$current_val" == "true" ]]; then eval "$var_name=false"
+        else eval "$var_name=true"; fi
       fi
-    fi
-  done
+    done
+  fi
 
   # Docker-specific overrides
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
