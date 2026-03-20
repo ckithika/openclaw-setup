@@ -86,11 +86,13 @@ Native mode runs OpenClaw directly on your Mac with full system access (iMessage
 
 7. **Configure persona** — name your agent, set your name/timezone, define its purpose. Workspace files (SOUL.md, IDENTITY.md, USER.md, TOOLS.md, HEARTBEAT.md) are generated from preset-specific templates.
 
-8. **Optional: Obsidian vault** — creates unified brain folder structure.
+8. **Optional: Google Workspace / Gmail** — if enabled, the script will guide you through OAuth setup. You'll need a Google Cloud project with OAuth credentials (see the Docker setup section for detailed steps on creating OAuth credentials for both Workspace and personal Gmail accounts).
 
-9. **Optional: GitHub backup** — creates private repo + launchd auto-sync every 10 min.
+9. **Optional: Obsidian vault** — creates unified brain folder structure.
 
-10. **Start OpenClaw:**
+10. **Optional: GitHub backup** — creates private repo + launchd auto-sync every 10 min.
+
+11. **Start OpenClaw:**
     ```bash
     openclaw start
     ```
@@ -206,9 +208,38 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
     docker exec -it openclaw-<name> gh auth login
     docker exec -it openclaw-<name> doctl auth init
     docker exec -it openclaw-<name> supabase login
-    docker exec -it openclaw-<name> gog auth credentials /home/node/.config/gogcli/credentials.json
-    docker exec -it openclaw-<name> gog auth add you@example.com --services gmail,calendar,drive,contacts,docs,sheets
     ```
+
+21. **Set up Google Workspace / Gmail** (if gog CLI installed):
+
+    First, create OAuth credentials in [Google Cloud Console](https://console.cloud.google.com):
+
+    1. Create a new project (e.g., `my-openclaw-agent`)
+    2. Go to **APIs & Services > Library** and enable:
+       - Gmail API
+       - Google Calendar API
+       - Google Drive API
+       - Google Sheets API
+       - Google Docs API
+       - People API
+    3. Go to **APIs & Services > OAuth consent screen** and create:
+       - **Google Workspace accounts** (`you@company.com`): select **Internal**
+       - **Personal Gmail** (`you@gmail.com`): select **External**, then add your email under **Test users**
+    4. Go to **APIs & Services > Credentials** > Create Credentials > **OAuth client ID**:
+       - Application type: **Desktop app**
+       - Download the JSON file
+    5. Copy the credentials and authenticate:
+       ```bash
+       cp ~/Downloads/client_secret_*.json ~/openclaw-instances/<name>/google-credentials/credentials.json
+       docker exec -it openclaw-<name> gog auth credentials /home/node/.config/gogcli/credentials.json
+       docker exec -it openclaw-<name> gog auth add you@example.com --services gmail,calendar,drive,contacts,docs,sheets --manual
+       ```
+    6. Open the URL in your browser, sign in, authorize
+    7. The browser will redirect to a page that won't load — copy the **full URL from the address bar** (contains `?code=...`) and paste it back into the terminal
+    8. Set a keyring passphrase when prompted, then add it to `.env`:
+       ```bash
+       echo 'GOG_PASSPHRASE=your-passphrase' >> ~/openclaw-instances/<name>/.env
+       ```
 
 #### Generated Files (Docker)
 
