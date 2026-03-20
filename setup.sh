@@ -253,20 +253,66 @@ ask_secret() {
 ask_choice() {
   local prompt="$1"; shift
   local options=("$@")
+  local count=${#options[@]}
+
   echo -e "${YELLOW}?${NC} ${prompt}" >&2
-  for i in "${!options[@]}"; do
-    echo -e "  ${BOLD}$((i+1)))${NC} ${options[$i]}" >&2
-  done
-  local choice
-  while true; do
-    read -rp "$(echo -e "  ${YELLOW}>${NC} ")" choice || true
+
+  # Non-interactive fallback (piped input)
+  if [[ ! -t 0 ]]; then
+    for i in "${!options[@]}"; do
+      echo -e "  ${BOLD}$((i+1)))${NC} ${options[$i]}" >&2
+    done
+    local choice
+    read -r choice || true
     choice="${choice:-1}"
-    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= count )); then
       echo "${options[$((choice-1))]}"
-      return
+    else
+      echo "${options[0]}"
     fi
-    echo -e "  ${RED}Enter a number between 1 and ${#options[@]}${NC}" >&2
+    return
+  fi
+
+  # Interactive arrow-key selector
+  local cursor=0
+
+  # Draw initial list
+  for i in "${!options[@]}"; do
+    if [[ $i -eq $cursor ]]; then
+      printf '  %b>%b %s\n' "$CYAN" "$NC" "${options[$i]}" >&2
+    else
+      printf '    %s\n' "${options[$i]}" >&2
+    fi
   done
+
+  while true; do
+    local key=""
+    IFS= read -rsn1 key 2>/dev/null || true
+
+    if [[ "$key" == $'\x1b' ]]; then
+      local seq=""
+      IFS= read -rsn2 seq 2>/dev/null || true
+      case "$seq" in
+        '[A') (( cursor > 0 )) && (( cursor-- )) ;;           # Up
+        '[B') (( cursor < count - 1 )) && (( cursor++ )) ;;   # Down
+      esac
+    elif [[ "$key" == "" ]]; then
+      # Enter — confirm selection
+      break
+    fi
+
+    # Redraw
+    printf '\e[%dA' "$count" >&2
+    for i in "${!options[@]}"; do
+      if [[ $i -eq $cursor ]]; then
+        printf '\r\e[K  %b>%b %s\n' "$CYAN" "$NC" "${options[$i]}" >&2
+      else
+        printf '\r\e[K    %s\n' "${options[$i]}" >&2
+      fi
+    done
+  done
+
+  echo "${options[$cursor]}"
 }
 
 # Interactive multi-select with arrow keys and spacebar
@@ -952,18 +998,45 @@ toggle_features() {
 # ── [IMPROVEMENT 1] Channel Setup with Real Credentials ──────────────────────
 setup_channels() {
   header "Channel Setup"
-  echo -e "Enable messaging channels and configure credentials.\n"
+  echo -e "Select messaging channels to enable, then configure credentials.\n"
 
-  # ── WebChat (no credentials needed) ──
-  if ask_yn "WebChat (browser-based, always available)" "$( [[ "$CH_WEBCHAT" == "true" ]] && echo y || echo n )"; then
-    CH_WEBCHAT=true
-  else
-    CH_WEBCHAT=false
+  # Channel selection via multi-select (or y/N fallback)
+  local channel_items=(
+    "CH_WHATSAPP:WhatsApp:$CH_WHATSAPP"
+    "CH_TELEGRAM:Telegram:$CH_TELEGRAM"
+    "CH_DISCORD:Discord:$CH_DISCORD"
+    "CH_SLACK:Slack:$CH_SLACK"
+    "CH_SIGNAL:Signal:$CH_SIGNAL"
+  )
+
+  # iMessage only for native
+  if [[ "$DEPLOY_MODE" == "native" ]]; then
+    channel_items+=("CH_IMESSAGE:iMessage (macOS native):$CH_IMESSAGE")
   fi
 
+  if [[ -t 0 ]]; then
+    echo -e "  Use ${BOLD}↑/↓${NC} to navigate, ${BOLD}Space${NC} to toggle, ${BOLD}Enter${NC} to confirm.\n"
+    multi_select "${channel_items[@]}"
+  else
+    for ch_line in "${channel_items[@]}"; do
+      local ch_var="${ch_line%%:*}"
+      local ch_val="${ch_line##*:}"
+      local ch_label="${ch_line#*:}"; ch_label="${ch_label%:*}"
+      local ch_default="n"; [[ "$ch_val" == "true" ]] && ch_default="y"
+      if ask_yn "$ch_label" "$ch_default"; then
+        eval "$ch_var=true"
+      else
+        eval "$ch_var=false"
+      fi
+    done
+  fi
+
+  echo ""
+
+  # ── Credential prompts for selected channels ──
+
   # ── WhatsApp ──
-  if ask_yn "WhatsApp" "$( [[ "$CH_WHATSAPP" == "true" ]] && echo y || echo n )"; then
-    CH_WHATSAPP=true
+  if [[ "$CH_WHATSAPP" == "true" ]]; then
     echo ""
     echo -e "  ${CYAN}WhatsApp Setup Notes:${NC}"
     echo -e "  - Uses WhatsApp Web protocol (phone must stay online)"
@@ -974,13 +1047,10 @@ setup_channels() {
     if ask_yn "  Use a dedicated WhatsApp number (recommended)?" "y"; then
       info "  Good choice. Have your secondary phone ready for QR scan after setup."
     fi
-  else
-    CH_WHATSAPP=false
   fi
 
-  # ── Telegram ──
-  if ask_yn "Telegram" "$( [[ "$CH_TELEGRAM" == "true" ]] && echo y || echo n )"; then
-    CH_TELEGRAM=true
+  # ── Telegram credentials ──
+  if [[ "$CH_TELEGRAM" == "true" ]]; then
     echo ""
     echo -e "  ${CYAN}Telegram Setup:${NC}"
     echo -e "  1. Open Telegram and message @BotFather"
@@ -995,13 +1065,10 @@ setup_channels() {
     else
       warn "  Skipped — add token later in openclaw.json or .env"
     fi
-  else
-    CH_TELEGRAM=false
   fi
 
-  # ── Discord ──
-  if ask_yn "Discord" "$( [[ "$CH_DISCORD" == "true" ]] && echo y || echo n )"; then
-    CH_DISCORD=true
+  # ── Discord credentials ──
+  if [[ "$CH_DISCORD" == "true" ]]; then
     echo ""
     echo -e "  ${CYAN}Discord Setup:${NC}"
     echo -e "  1. Go to https://discord.com/developers/applications"
@@ -1016,13 +1083,10 @@ setup_channels() {
     else
       warn "  Skipped — add token later in openclaw.json or .env"
     fi
-  else
-    CH_DISCORD=false
   fi
 
-  # ── Slack ──
-  if ask_yn "Slack" "$( [[ "$CH_SLACK" == "true" ]] && echo y || echo n )"; then
-    CH_SLACK=true
+  # ── Slack credentials ──
+  if [[ "$CH_SLACK" == "true" ]]; then
     echo ""
     echo -e "  ${CYAN}Slack Setup:${NC}"
     echo -e "  1. Go to https://api.slack.com/apps > Create New App"
@@ -1040,33 +1104,23 @@ setup_channels() {
     else
       warn "  Skipped — add tokens later in openclaw.json or .env"
     fi
-  else
-    CH_SLACK=false
   fi
 
-  # ── Signal ──
-  if ask_yn "Signal" "$( [[ "$CH_SIGNAL" == "true" ]] && echo y || echo n )"; then
-    CH_SIGNAL=true
+  # ── Signal info ──
+  if [[ "$CH_SIGNAL" == "true" ]]; then
     echo ""
     echo -e "  ${CYAN}Signal Setup Notes:${NC}"
     echo -e "  - Signal linking happens after setup via: openclaw channels login signal"
     echo ""
-  else
-    CH_SIGNAL=false
   fi
 
-  # ── iMessage (native only) ──
-  if [[ "$DEPLOY_MODE" == "native" ]]; then
-    if ask_yn "iMessage (native macOS only)" "$( [[ "$CH_IMESSAGE" == "true" ]] && echo y || echo n )"; then
-      CH_IMESSAGE=true
-      echo ""
-      echo -e "  ${CYAN}iMessage Notes:${NC}"
-      echo -e "  - Requires macOS with Messages.app configured"
-      echo -e "  - OpenClaw reads/sends via AppleScript bridge"
-      echo ""
-    else
-      CH_IMESSAGE=false
-    fi
+  # ── iMessage info (native only) ──
+  if [[ "$CH_IMESSAGE" == "true" && "$DEPLOY_MODE" == "native" ]]; then
+    echo ""
+    echo -e "  ${CYAN}iMessage Notes:${NC}"
+    echo -e "  - Requires macOS with Messages.app configured"
+    echo -e "  - OpenClaw reads/sends via AppleScript bridge"
+    echo ""
   fi
 
   echo ""
