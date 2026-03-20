@@ -451,6 +451,7 @@ CH_IMESSAGE=false
 CH_WEBCHAT=true
 WHATSAPP_OWNER_NUMBER=""
 FEAT_WHATSAPP_VOICE=false
+WHATSAPP_VOICE_METHOD=""
 
 # Channel credentials (collected during setup)
 TELEGRAM_BOT_TOKEN=""
@@ -1054,12 +1055,19 @@ setup_channels() {
       warn "  No number provided — WhatsApp will use pairing mode (code exchange required)"
     fi
 
-    if ask_yn "  Enable voice note transcription? (requires OpenAI API key)" "n"; then
+    if ask_yn "  Enable voice note transcription?" "y"; then
       FEAT_WHATSAPP_VOICE=true
-      if [[ -z "$OPENAI_API_KEY" ]]; then
-        OPENAI_API_KEY=$(ask_secret "  OpenAI API key for Whisper transcription" "OpenAI API key")
+      WHATSAPP_VOICE_METHOD=$(ask_choice "  Transcription method:" "local (whisper-cpp, free, runs on device)" "cloud (OpenAI Whisper API, requires API key)")
+      if [[ "$WHATSAPP_VOICE_METHOD" == *"cloud"* ]]; then
+        WHATSAPP_VOICE_METHOD="cloud"
+        if [[ -z "$OPENAI_API_KEY" ]]; then
+          OPENAI_API_KEY=$(ask_secret "  OpenAI API key for Whisper transcription" "OpenAI API key")
+        fi
+        success "  Voice note transcription enabled (OpenAI Whisper API)"
+      else
+        WHATSAPP_VOICE_METHOD="local"
+        success "  Voice note transcription enabled (local whisper-cpp, no API costs)"
       fi
-      success "  Voice note transcription enabled (via OpenAI Whisper API)"
     fi
   fi
 
@@ -2818,27 +2826,38 @@ TOOLSMD
 
   # Add voice note instructions if enabled
   if [[ "$FEAT_WHATSAPP_VOICE" == "true" ]]; then
-    cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
+    if [[ "${WHATSAPP_VOICE_METHOD:-local}" == "local" ]]; then
+      cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
 
 ## WhatsApp Voice Notes
 
-When a user sends a voice note on WhatsApp, it arrives as an audio file attachment.
-To transcribe it and respond to the content:
+When a voice note arrives, the message body shows `<media:audio>` with a `mediaPath` to the `.ogg` file. **Always transcribe it before responding.**
 
-1. The audio file is saved to a temp path (check the message attachment metadata)
-2. Transcribe using the OpenAI Whisper API skill:
-   ```bash
-   /app/skills/openai-whisper-api/scripts/transcribe.sh /path/to/audio.ogg
-   ```
-   Or with options:
-   ```bash
-   /app/skills/openai-whisper-api/scripts/transcribe.sh /path/to/audio.ogg --language en --json
-   ```
-3. Read the transcript and respond as if the user typed that text
-4. If transcription fails, ask the user to resend or type their message
+Steps:
+1. Convert OGG to WAV: `ffmpeg -i <mediaPath> -ar 16000 -ac 1 -c:a pcm_s16le /tmp/voice-note.wav -y`
+2. Transcribe: `whisper-cli -m ~/.local/share/whisper-cpp/ggml-base.bin -f /tmp/voice-note.wav --no-timestamps`
+3. Read the transcript text from the output (appears after the model loading lines)
+4. Respond to the transcript content as if the user typed it
+5. Clean up: `rm /tmp/voice-note.wav`
 
+This runs locally — no API costs.
+VOICEMD
+    else
+      cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
+
+## WhatsApp Voice Notes
+
+When a voice note arrives, the message body shows `<media:audio>` with a `mediaPath` to the `.ogg` file. **Always transcribe it before responding.**
+
+Transcribe using the OpenAI Whisper API skill:
+```bash
+/app/skills/openai-whisper-api/scripts/transcribe.sh /path/to/audio.ogg
+```
+
+Read the resulting .txt file for the transcript. Respond as if the user typed that text.
 Supported formats: ogg, mp3, m4a, wav, webm
 VOICEMD
+    fi
   fi
 
   # HEARTBEAT.md
@@ -3129,6 +3148,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     fonts-liberation \\
     fonts-noto-color-emoji \\
     && rm -rf /var/lib/apt/lists/*
+"
+  fi
+
+  # Local whisper-cpp for voice note transcription
+  if [[ "$FEAT_WHATSAPP_VOICE" == "true" && "${WHATSAPP_VOICE_METHOD:-}" == "local" ]]; then
+    needs_dockerfile=true
+    dockerfile_content+="
+# ffmpeg for audio conversion + whisper model for local voice transcription
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# whisper.cpp pre-built binary
+RUN ARCH=\$(dpkg --print-architecture) && \\
+    VERSION=\$(curl -fsSL https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest | grep tag_name | cut -d '\"' -f4 | sed 's/v//') && \\
+    curl -fsSL \"https://github.com/ggml-org/whisper.cpp/releases/download/v\${VERSION}/whisper-bin-linux-\${ARCH}.tar.gz\" \\
+    | tar xz -C /usr/local/bin --strip-components=1 2>/dev/null || true
+
+# Download Whisper base model
+RUN mkdir -p /home/node/.local/share/whisper-cpp && \\
+    curl -fsSL \"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin\" \\
+    -o /home/node/.local/share/whisper-cpp/ggml-base.bin
 "
   fi
 
