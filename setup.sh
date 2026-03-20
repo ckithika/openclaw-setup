@@ -2374,7 +2374,7 @@ CH
       "enabled": true,
       "accounts": {
         "default": {
-          "dmPolicy": "self"
+          "dmPolicy": "pairing"
         }
       }
     }

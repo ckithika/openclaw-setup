@@ -161,7 +161,7 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
    - Config directories are pre-created to avoid permission errors
    - A custom Dockerfile is generated and `docker-compose.yml` uses `build: .`
 
-8. **Select channels** — use the multi-select checkbox. Credential prompts for selected channels only. WhatsApp defaults to self-chat mode (`dmPolicy: "self"`).
+8. **Select channels** — use the multi-select checkbox. Credential prompts for selected channels only. WhatsApp defaults to pairing mode (`dmPolicy: "pairing"`) — requires a pairing code before anyone can chat.
 
 9. **Select model provider** — 7 options.
 
@@ -377,7 +377,7 @@ The setup wizard walks you through these phases:
 | Channel | Auth | Default DM Policy | Native | Docker |
 |---------|------|-------------------|:------:|:------:|
 | WebChat | None | — | Yes | Yes |
-| WhatsApp | QR code | **self** (owner only) | Yes | Yes |
+| WhatsApp | QR code | pairing | Yes | Yes |
 | Telegram | Bot token | pairing | Yes | Yes |
 | Discord | Bot token | pairing | Yes | Yes |
 | Slack | Bot + App tokens | pairing | Yes | Yes |
@@ -450,7 +450,7 @@ Second Mac:  ./setup.sh → "Existing brain repo?" → Yes → Clones + configur
 - Input validation on all user inputs (rejects control chars, path traversal, shell injection)
 - Credentials stored with `chmod 600`/`700` permissions
 - API keys entered via hidden input (`read -s`)
-- WhatsApp defaults to self-chat mode (owner only)
+- WhatsApp defaults to pairing mode (requires code exchange before chatting)
 - Docker containers (bridged mode): `cap_drop: ALL`, `no-new-privileges`, healthchecks, explicit DNS
 - Docker containers (host mode): `no-new-privileges`, healthchecks
 - Gateway bound to loopback by default
