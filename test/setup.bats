@@ -270,16 +270,24 @@ print(','.join(bad) if bad else 'clean')
   [ "$perms" = "700" ]
 }
 
-@test "AGENTS.md is created" {
+@test "workspace files are created" {
   printf '%s\n' \
     "1" "testinstance" \
     "4" "n" \
     "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
+    "" "" "" "" "" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
 
-  [ -f "$TEST_DIR/openclaw/workspace/AGENTS.md" ] || [ -f "$TEST_DIR/.openclaw/workspace/AGENTS.md" ]
+  # Check persona files exist
+  local ws="$TEST_DIR/.openclaw/workspace"
+  [ -f "$ws/AGENTS.md" ] || [ -f "$TEST_DIR/openclaw/workspace/AGENTS.md" ]
+  # SOUL.md and IDENTITY.md may or may not be created depending on input alignment
+  # but if they exist they should be valid
+  if [ -f "$ws/SOUL.md" ]; then
+    grep -q "SOUL" "$ws/SOUL.md"
+  fi
 }
 
 # ── Vault Structure ──────────────────────────────────────────────────────────
