@@ -270,10 +270,9 @@ ask_choice() {
 }
 
 # Interactive multi-select with arrow keys and spacebar
-# Usage: multi_select "result_var" "label1:var1:val1" "label2:var2:val2" ...
+# Usage: multi_select "label1:var1:val1" "label2:var2:val2" ...
 # Sets the named variables to "true" or "false" based on selection
 multi_select() {
-  local -n _result_items=$1; shift
   local items=("$@")
   local count=${#items[@]}
   local cursor=0
@@ -352,8 +351,6 @@ multi_select() {
     fi
   done
 
-  # Set result
-  _result_items=("${selected[@]}")
 }
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
@@ -912,8 +909,7 @@ toggle_features() {
 
   # Check if we have a TTY for interactive multi-select
   if [[ -t 0 ]]; then
-    local _sel_result=()
-    multi_select _sel_result "${features[@]}"
+    multi_select "${features[@]}"
   else
     # Non-interactive fallback (piped input) — use old y/N style
     for feat_line in "${features[@]}"; do
