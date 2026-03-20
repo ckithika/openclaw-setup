@@ -1,6 +1,6 @@
 # openclaw-setup
 
-A unified, interactive setup script for [OpenClaw](https://openclaw.ai) — the open-source personal AI assistant. One script handles native macOS + Docker deployments, feature toggles, model providers, unified Obsidian brain, Claude knowledge sync, and GitHub backup.
+A unified, interactive setup script for [OpenClaw](https://openclaw.ai) — the open-source personal AI assistant. One script handles native macOS + Docker deployments, with presets for personal assistants, developers, and autonomous agents.
 
 Built for **Apple Silicon** (M4/M3/M2/M1) but works on any macOS or Linux system.
 
@@ -20,6 +20,31 @@ cd openclaw-setup
 ./setup.sh --version       # Show version (v3.0.0)
 ./setup.sh --help          # Show help
 ```
+
+---
+
+## Presets
+
+The setup starts by asking you to choose a preset. Each preset configures features, workspace files, and defaults tailored to your use case.
+
+| Preset | Best for | What's enabled |
+|--------|----------|----------------|
+| **personal-assistant** | Non-technical users who want a smart daily assistant | Messaging, email, calendar, web search, memory. No coding tools, shell access, or sandboxing. |
+| **developer** | Software engineers and technical users | Full coding environment: shell, file access, sandbox, Claude Code, GitHub backup. |
+| **autonomous-agent** | Autonomous SaaS agents that run a product | Everything: code, social media, email, browser, cron jobs, all skills, approval gates. |
+| **custom** | Power users who want full control | Start from defaults and toggle each feature manually. |
+
+After selecting a preset, you can optionally customize individual features.
+
+---
+
+## Interactive UI
+
+The setup wizard uses a modern terminal UI:
+
+- **Single-select lists** (deployment mode, model provider, presets): navigate with **arrow keys**, confirm with **Enter**
+- **Multi-select checkboxes** (features, channels): navigate with **arrow keys**, toggle with **Space**, confirm with **Enter**
+- All interactive widgets fall back to numbered/y/N input when running non-interactively (piped input, CI)
 
 ---
 
@@ -49,32 +74,26 @@ Native mode runs OpenClaw directly on your Mac with full system access (iMessage
    ./setup.sh
    ```
 
-2. **Select native mode** when prompted (option 1).
+2. **Select native mode** when prompted.
 
 3. **Name your instance** (e.g., `personal`) — config goes to `~/.openclaw/`.
 
-4. **Toggle features** — all 26 features are available in native mode including:
-   - Voice/TTS (macOS native `say` command)
-   - iMessage channel
-   - Sandbox (Docker-based tool isolation)
-   - Claude Sync (session retention fix + symlinks)
+4. **Choose a preset** — select personal-assistant, developer, autonomous-agent, or custom. Optionally customize individual features with the checkbox UI.
 
-5. **Configure channels** — enter bot tokens when prompted:
-   - WhatsApp (QR code pairing guided)
-   - Telegram (from @BotFather)
-   - Discord, Slack, Signal
-   - iMessage (native only)
+5. **Select channels** — use the multi-select checkbox to pick channels (WhatsApp, Telegram, Discord, Slack, Signal, iMessage). Credential prompts appear only for selected channels.
 
 6. **Select model provider** — 7 options with credential prompting.
 
-7. **Optional: Obsidian vault** — creates unified brain folder structure.
+7. **Configure persona** — name your agent, set your name/timezone, define its purpose. Workspace files (SOUL.md, IDENTITY.md, USER.md, TOOLS.md, HEARTBEAT.md) are generated from preset-specific templates.
 
-8. **Optional: GitHub backup** — creates private repo + launchd auto-sync every 10 min.
+8. **Optional: Obsidian vault** — creates unified brain folder structure.
 
-9. **Start OpenClaw:**
-   ```bash
-   openclaw start
-   ```
+9. **Optional: GitHub backup** — creates private repo + launchd auto-sync every 10 min.
+
+10. **Start OpenClaw:**
+    ```bash
+    openclaw start
+    ```
 
 #### Generated Files (Native)
 
@@ -83,11 +102,12 @@ Native mode runs OpenClaw directly on your Mac with full system access (iMessage
 ├── openclaw.json              # Main config
 ├── credentials/               # API keys (chmod 700)
 ├── workspace/
-│   ├── SOUL.md                # Agent persona
-│   ├── IDENTITY.md            # Agent identity
-│   ├── USER.md                # User info
+│   ├── SOUL.md                # Agent persona (preset-specific)
+│   ├── IDENTITY.md            # Agent name, vibe, emoji
+│   ├── USER.md                # Your name, timezone
 │   ├── AGENTS.md              # Agent behavior rules
-│   └── TOOLS.md               # Environment-specific notes
+│   ├── TOOLS.md               # Available tools reference
+│   └── HEARTBEAT.md           # Periodic check tasks (preset-specific)
 └── vault-sync.sh              # Git auto-sync (if backup enabled)
 
 ~/Library/LaunchAgents/
@@ -117,7 +137,7 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
    ./setup.sh
    ```
 
-2. **Select Docker mode** (option 2).
+2. **Select Docker mode.**
 
 3. **Name your instance** (e.g., `seekrjobs`, `work-brand-a`).
 
@@ -125,60 +145,69 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
 
 5. **Set gateway port** (random port suggested, or choose your own).
 
-6. **Toggle features** — Docker-specific behavior:
+6. **Choose a preset** — Docker-specific behavior:
    - **Sandbox**: auto-enabled, not shown (container is already sandboxed)
    - **Voice/TTS**: not shown (not available in containers)
    - **Claude Sync**: not shown (can't access host Claude settings)
-   - **Browser**: runs headless with `noSandbox: true` automatically; Chromium is auto-installed via a generated Dockerfile
+   - **Browser**: runs headless with `noSandbox: true`; Chromium auto-installed via generated Dockerfile
    - All other features work normally
 
-7. **Select CLI tools** — the script generates a custom Dockerfile with your selections:
+7. **Select CLI tools** (skipped for personal-assistant preset):
    - `gh` (GitHub CLI) — repo management, PRs, issues
    - `doctl` (DigitalOcean CLI) — infrastructure management
    - `supabase` — database management
    - `gog` (Google Workspace CLI) — auto-selected if Google Workspace enabled
    - `xurl` (Twitter/X CLI) — social media posting
    - Config directories are pre-created to avoid permission errors
+   - A custom Dockerfile is generated and `docker-compose.yml` uses `build: .`
 
-8. **Configure channels** — same as native (tokens prompted).
+8. **Select channels** — use the multi-select checkbox. Credential prompts for selected channels only. WhatsApp defaults to self-chat mode (`dmPolicy: "self"`).
 
-9. **Network mode** — you'll be asked:
-   - **Host networking** (recommended for OrbStack on macOS): `network_mode: host` — avoids known Node.js networking issues with OrbStack's bridged network
-   - **Bridged networking** (default): standard Docker networking with port mapping, DNS set to `8.8.8.8` and `1.1.1.1`
+9. **Select model provider** — 7 options.
 
-10. **Optional: Telegram watchdog** — if Telegram is enabled, a sidecar monitors for connectivity loss and auto-restarts the container (recommended for OrbStack).
+10. **Configure persona** — name your agent, set your name/timezone, define its purpose. Workspace files generated from preset-specific templates.
 
-11. **Optional: Tailscale sidecar** — adds VPN for remote access (skipped if using host networking).
+11. **Network mode:**
+    - **Host networking** (recommended for OrbStack on macOS): `network_mode: host`
+    - **Bridged networking** (default): port mapping, DNS set to `8.8.8.8` and `1.1.1.1`
 
-12. **Optional: Daily backups** — Alpine sidecar container, 7-day retention.
+12. **Optional: Telegram watchdog** — sidecar that monitors logs for connectivity failures and auto-restarts the container (recommended for OrbStack).
 
-13. **Optional: GitHub backup auto-sync** — uses OpenClaw's built-in cron (every 10 min) instead of macOS launchd.
+13. **Optional: Tailscale sidecar** — VPN for remote access (skipped if using host networking).
 
-12. **Set your environment variables** in the generated `.env` file:
+14. **Optional: Daily backups** — Alpine sidecar container, 7-day retention.
+
+15. **Optional: GitHub backup auto-sync** — uses OpenClaw's built-in cron (every 10 min) instead of macOS launchd.
+
+16. **Set your environment variables** in the generated `.env` file:
     ```bash
     nano ~/openclaw-instances/<name>/.env
     ```
-    Add `TS_AUTHKEY` if using Tailscale.
+    Add `TS_AUTHKEY` (Tailscale) and `GOG_PASSPHRASE` (Google Workspace) if needed.
 
-13. **Start the instance:**
+17. **Start the instance:**
     ```bash
     cd ~/openclaw-instances/<name>
     docker compose up -d
     ```
 
-14. **Check logs:**
+18. **Check logs:**
     ```bash
     docker compose logs -f openclaw-<name>
     ```
 
-15. **Install skills** (if any were selected):
+19. **Pair channels** (e.g., WhatsApp):
     ```bash
-    docker exec openclaw-<name> bash /home/node/openclaw/workspace/install-skills.sh
+    docker compose exec openclaw-<name> openclaw channels login --channel whatsapp
     ```
 
-16. **Pair channels** (e.g., WhatsApp):
+20. **Auth CLI tools** (if installed):
     ```bash
-    docker compose exec openclaw-<name> openclaw channels login whatsapp
+    docker exec -it openclaw-<name> gh auth login
+    docker exec -it openclaw-<name> doctl auth init
+    docker exec -it openclaw-<name> supabase login
+    docker exec -it openclaw-<name> gog auth credentials /home/node/.config/gogcli/credentials.json
+    docker exec -it openclaw-<name> gog auth add you@example.com --services gmail,calendar,drive,contacts,docs,sheets
     ```
 
 #### Generated Files (Docker)
@@ -193,11 +222,12 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
 │   ├── openclaw.json          # Main config
 │   ├── credentials/           # API keys (chmod 700)
 │   └── workspace/
-│       ├── SOUL.md            # Agent persona
-│       ├── IDENTITY.md        # Agent identity
-│       ├── USER.md            # User info
+│       ├── SOUL.md            # Agent persona (preset-specific)
+│       ├── IDENTITY.md        # Agent name, vibe, emoji
+│       ├── USER.md            # Your name, timezone
 │       ├── AGENTS.md          # Agent behavior rules
-│       └── TOOLS.md           # Environment-specific notes
+│       ├── TOOLS.md           # Available tools reference
+│       └── HEARTBEAT.md       # Periodic check tasks (preset-specific)
 ├── workspace/                 # Agent workspace (mounted volume)
 ├── chrome-profile/            # Persistent browser sessions (if browser enabled)
 ├── google-credentials/        # Google OAuth tokens (if Google Workspace enabled)
@@ -214,6 +244,7 @@ When using host networking:
 - `OLLAMA_HOST` is automatically set to `http://localhost:11434` (not `host.docker.internal`)
 - Tailscale sidecar is not needed (use host Tailscale instead)
 - `cap_drop: ALL` is not applied (unnecessary with host networking)
+- Healthcheck port matches the configured gateway port
 
 #### Extending the Docker Image
 
@@ -221,15 +252,37 @@ The setup script **automatically generates a Dockerfile** when you select browse
 
 #### Mounting Source Code Repos
 
-To give the agent access to a local codebase:
+To give the agent access to a local codebase, add to docker-compose.yml:
 
 ```yaml
 volumes:
   # ... existing volumes
   - /path/to/your/repo:/home/node/openclaw/workspace/repo-name
   - ~/.ssh:/home/node/.ssh:ro           # SSH keys for git push
-  - ~/.gitconfig:/home/node/.gitconfig:ro  # Git config
 ```
+
+---
+
+## Persona Setup
+
+After config generation, the script asks you to customize your agent's identity:
+
+| Question | What it sets |
+|----------|-------------|
+| Agent name | IDENTITY.md name |
+| Agent personality | IDENTITY.md vibe, SOUL.md tone |
+| Your name | USER.md |
+| Your timezone | USER.md |
+| Agent purpose | SOUL.md mission statement |
+
+Each preset generates different SOUL.md content:
+
+| Preset | SOUL.md focus |
+|--------|--------------|
+| **personal-assistant** | Daily life: email, calendar, reminders, research. No code sections. |
+| **developer** | Code review, debugging, project management, testing. |
+| **autonomous-agent** | Growth, revenue, social media, approval gates, GEO+SEO strategy. |
+| **custom** | Minimal template. |
 
 ---
 
@@ -246,26 +299,34 @@ volumes:
 | GitHub backup (auto-sync) | launchd | Container cron | Docker uses OpenClaw cron instead of macOS launchd |
 | Google Workspace OAuth | Browser flow | Manual/headless | Docker needs `--manual` OAuth flag |
 | apple-notes skill | Yes | No | macOS native only |
+| CLI tools wizard | N/A | Yes | Generates custom Dockerfile with selected tools |
+| Telegram watchdog | N/A | Yes | Auto-restarts on OrbStack connectivity loss |
 | All other features | Yes | Yes | Full support |
 
 ## What This Does
 
-The setup wizard walks you through 13 phases:
+The setup wizard walks you through these phases:
 
 ```
  1.  Pre-flight checks         Hardware, Ollama, Docker, Node.js, disk
  2.  Deployment mode           Native macOS or Docker container
  3.  Instance config           Name, directories, ports
- 4.  Feature toggles           Context-aware (Docker hides N/A options)
- 5.  Channels                  WhatsApp, Telegram, Discord, Slack, Signal, iMessage
- 6.  Model provider            7 providers with credential prompting
- 7.  Google Workspace          Gmail, Calendar, Drive via gog/MCP/OAuth
- 8.  Obsidian vault            Unified brain — single source of truth
- 9.  Tag taxonomy              Auto-tagging with life areas and projects
-10.  Claude knowledge sync     Web + Code session export, retention fix (native only)
-11.  Skills                    6 categories, 13+ skills
-12.  Memory config             Mem0, Cognee plugins
-13.  GitHub backup             Private repo, auto-sync (launchd or container cron)
+ 4.  Feature preset            personal-assistant / developer / autonomous-agent / custom
+ 5.  Feature toggles           Interactive multi-select (Space to toggle, Enter to confirm)
+ 6.  Channels                  Multi-select + credential prompts for selected channels
+ 7.  Model provider            7 providers with credential prompting
+ 8.  Google Workspace          Gmail, Calendar, Drive via gog/MCP/OAuth
+ 9.  Obsidian vault            Unified brain — single source of truth
+10.  Tag taxonomy              Auto-tagging with life areas and projects
+11.  Claude knowledge sync     Session export, retention fix (native only)
+12.  Skills                    6 categories, 13+ skills
+13.  Memory config             Mem0, Cognee plugins
+14.  GitHub backup             Private repo, auto-sync (launchd or container cron)
+15.  Config generation         openclaw.json + credentials
+16.  Persona setup             Agent identity, user info, workspace files
+17.  Docker setup              Dockerfile, docker-compose, CLI tools, sidecars
+18.  Channel pairing           WhatsApp QR, Signal linking
+19.  Health check              Config validation, connectivity tests
 ```
 
 ## Feature Toggles
@@ -313,15 +374,15 @@ The setup wizard walks you through 13 phases:
 
 ### Channels
 
-| Channel | Auth | Native | Docker |
-|---------|------|:------:|:------:|
-| WebChat | None | Yes | Yes |
-| WhatsApp | QR code | Yes | Yes (via `docker compose exec`) |
-| Telegram | Bot token | Yes | Yes |
-| Discord | Bot token | Yes | Yes |
-| Slack | Bot + App tokens | Yes | Yes |
-| Signal | Device linking | Yes | Yes (via `docker compose exec`) |
-| iMessage | macOS native | Yes | No |
+| Channel | Auth | Default DM Policy | Native | Docker |
+|---------|------|-------------------|:------:|:------:|
+| WebChat | None | — | Yes | Yes |
+| WhatsApp | QR code | **self** (owner only) | Yes | Yes |
+| Telegram | Bot token | pairing | Yes | Yes |
+| Discord | Bot token | pairing | Yes | Yes |
+| Slack | Bot + App tokens | pairing | Yes | Yes |
+| Signal | Device linking | pairing | Yes | Yes |
+| iMessage | macOS native | — | Yes | No |
 
 ## Architecture
 
@@ -352,23 +413,24 @@ Your notes ───────────────────────
 
 ```
 Mac (Apple Silicon)
-├── Native: Personal OpenClaw
+├── Native: Personal Assistant
+│   ├── Preset: personal-assistant
 │   ├── Obsidian vault (unified brain)
-│   ├── Claude Sync (session retention fix)
 │   ├── Google Workspace (gog)
-│   └── WebChat + WhatsApp + iMessage
+│   └── WhatsApp (self-chat) + iMessage
 │
-├── Docker: Work Agent 1 (Brand A)
-│   ├── Host networking (OrbStack)
-│   ├── Isolated Chrome profile
+├── Docker: Work Agent (SaaS Product)
+│   ├── Preset: autonomous-agent
+│   ├── CLIs: gh, doctl, supabase, gog, xurl
 │   ├── Source code repo mounted
-│   ├── Social media skills
+│   ├── Telegram watchdog sidecar
+│   ├── Cron jobs: daily report, content drafts, site health
 │   └── Daily backups
 │
-├── Docker: Work Agent 2 (Brand B)
-│   ├── Host networking (OrbStack)
-│   ├── Isolated Chrome profile
-│   └── Discord + scheduling
+├── Docker: Dev Agent (Side Project)
+│   ├── Preset: developer
+│   ├── CLIs: gh, supabase
+│   └── Discord + GitHub integration
 │
 ├── Shared: Ollama (native, localhost:11434)
 │
@@ -388,12 +450,14 @@ Second Mac:  ./setup.sh → "Existing brain repo?" → Yes → Clones + configur
 - Input validation on all user inputs (rejects control chars, path traversal, shell injection)
 - Credentials stored with `chmod 600`/`700` permissions
 - API keys entered via hidden input (`read -s`)
+- WhatsApp defaults to self-chat mode (owner only)
 - Docker containers (bridged mode): `cap_drop: ALL`, `no-new-privileges`, healthchecks, explicit DNS
 - Docker containers (host mode): `no-new-privileges`, healthchecks
 - Gateway bound to loopback by default
 - Unique auth tokens auto-generated per instance
 - Token format validation (Telegram, Discord)
 - API key verification against provider endpoints
+- Safe `.gitconfig` handling (copied to instance dir, not bind-mounted from home)
 - Optional `git-crypt` for sensitive vault folders
 - Claude Code session retention fix (prevents data loss, native only)
 
