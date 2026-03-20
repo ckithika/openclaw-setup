@@ -278,9 +278,13 @@ multi_select() {
   local cursor=0
 
   # Parse items into parallel arrays
+  # Format: VARNAME:Label text (may contain colons):true/false
   local labels=() varnames=() selected=()
   for item in "${items[@]}"; do
-    IFS=':' read -r varname label val <<< "$item"
+    local varname="${item%%:*}"          # everything before first :
+    local val="${item##*:}"              # everything after last :
+    local label="${item#*:}"             # remove first field
+    label="${label%:*}"                  # remove last field
     labels+=("$label")
     varnames+=("$varname")
     if [[ "$val" == "true" ]]; then
@@ -913,7 +917,9 @@ toggle_features() {
   else
     # Non-interactive fallback (piped input) — use old y/N style
     for feat_line in "${features[@]}"; do
-      IFS=':' read -r var_name description current_val <<< "$feat_line"
+      local var_name="${feat_line%%:*}"
+      local current_val="${feat_line##*:}"
+      local description="${feat_line#*:}"; description="${description%:*}"
       local status_icon="ON "; [[ "$current_val" == "false" ]] && status_icon="OFF"
       printf "  [%s] %s" "$status_icon" "$description" >&2
       local toggle
