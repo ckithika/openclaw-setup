@@ -450,6 +450,7 @@ CH_SIGNAL=false
 CH_IMESSAGE=false
 CH_WEBCHAT=true
 WHATSAPP_OWNER_NUMBER=""
+FEAT_WHATSAPP_VOICE=false
 
 # Channel credentials (collected during setup)
 TELEGRAM_BOT_TOKEN=""
@@ -1051,6 +1052,14 @@ setup_channels() {
       success "  WhatsApp restricted to: ${WHATSAPP_OWNER_NUMBER}"
     else
       warn "  No number provided — WhatsApp will use pairing mode (code exchange required)"
+    fi
+
+    if ask_yn "  Enable voice note transcription? (requires OpenAI API key)" "n"; then
+      FEAT_WHATSAPP_VOICE=true
+      if [[ -z "$OPENAI_API_KEY" ]]; then
+        OPENAI_API_KEY=$(ask_secret "  OpenAI API key for Whisper transcription" "OpenAI API key")
+      fi
+      success "  Voice note transcription enabled (via OpenAI Whisper API)"
     fi
   fi
 
@@ -2799,13 +2808,38 @@ IDENTITY
 _(What do they care about? What projects are they working on? Build this over time.)_
 USERMD
 
-  # TOOLS.md — empty template
-  cat > "${WORKSPACE_DIR}/TOOLS.md" <<'TOOLSMD'
+  # TOOLS.md
+  cat > "${WORKSPACE_DIR}/TOOLS.md" <<TOOLSMD
 # TOOLS.md - Available Tools & CLIs
 
 _(This file is yours to fill in as you discover your environment.)_
 _(Run tool commands to see what's available and document them here.)_
 TOOLSMD
+
+  # Add voice note instructions if enabled
+  if [[ "$FEAT_WHATSAPP_VOICE" == "true" ]]; then
+    cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
+
+## WhatsApp Voice Notes
+
+When a user sends a voice note on WhatsApp, it arrives as an audio file attachment.
+To transcribe it and respond to the content:
+
+1. The audio file is saved to a temp path (check the message attachment metadata)
+2. Transcribe using the OpenAI Whisper API skill:
+   ```bash
+   /app/skills/openai-whisper-api/scripts/transcribe.sh /path/to/audio.ogg
+   ```
+   Or with options:
+   ```bash
+   /app/skills/openai-whisper-api/scripts/transcribe.sh /path/to/audio.ogg --language en --json
+   ```
+3. Read the transcript and respond as if the user typed that text
+4. If transcription fails, ask the user to resend or type their message
+
+Supported formats: ogg, mp3, m4a, wav, webm
+VOICEMD
+  fi
 
   # HEARTBEAT.md
   case "$PRESET_NAME" in
