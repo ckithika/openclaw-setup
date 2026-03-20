@@ -211,8 +211,8 @@ teardown() {
 @test "native minimal generates valid JSON" {
   printf '%s\n' \
     "1" "testinstance" \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
-    "y" "n" "n" "n" "n" "n" "n" \
+    "4" "n" \
+    "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
@@ -224,8 +224,8 @@ teardown() {
 @test "native config has correct model" {
   printf '%s\n' \
     "1" "testinstance" \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
-    "y" "n" "n" "n" "n" "n" "n" \
+    "4" "n" \
+    "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
@@ -238,8 +238,8 @@ teardown() {
 @test "native config has no unsupported session keys" {
   printf '%s\n' \
     "1" "testinstance" \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
-    "y" "n" "n" "n" "n" "n" "n" \
+    "4" "n" \
+    "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
@@ -259,8 +259,8 @@ print(','.join(bad) if bad else 'clean')
 @test "credentials directory has chmod 700" {
   printf '%s\n' \
     "1" "testinstance" \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
-    "y" "n" "n" "n" "n" "n" "n" \
+    "4" "n" \
+    "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
@@ -273,8 +273,8 @@ print(','.join(bad) if bad else 'clean')
 @test "AGENTS.md is created" {
   printf '%s\n' \
     "1" "testinstance" \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
-    "y" "n" "n" "n" "n" "n" "n" \
+    "4" "n" \
+    "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
@@ -288,6 +288,7 @@ print(','.join(bad) if bad else 'clean')
   # Enable obsidian vault toggle (position 15 of 26)
   printf '%s\n' \
     "1" "testinstance" \
+    "1" "y" \
     "" "" "" "" "" "" "" "" "" "" "" "" "y" "" "" "" "" "" "" "" "" "" "" "" \
     "y" "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
@@ -309,10 +310,11 @@ print(','.join(bad) if bad else 'clean')
 @test "docker mode generates docker-compose.yml" {
   printf '%s\n' \
     "2" "test-docker" "" "18800" \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
+    "3" "n" \
     "y" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" \
+    "n" "n" "n" "n" "n" "n" \
     "n" "test-docker" \
     "n" "n" "n" "n" "n" "n" "n" "n" \
   | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true

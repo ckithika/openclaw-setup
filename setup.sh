@@ -630,9 +630,138 @@ choose_instance() {
   success "Workspace: $WORKSPACE_DIR"
 }
 
+# ── Feature Presets ─────────────────────────────────────────────────────────
+apply_preset() {
+  local preset="$1"
+  case "$preset" in
+    personal-assistant)
+      # Non-technical: messaging, calendar, email, web, memory — no code/shell/sandbox
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=false
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=false
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=false
+      FEAT_SHELL_EXEC=false
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=false
+      FEAT_GOOGLE_WORKSPACE=true
+      FEAT_OBSIDIAN_VAULT=true
+      FEAT_CLAUDE_SYNC=false
+      FEAT_TAG_TAXONOMY=false
+      FEAT_GITHUB_BACKUP=false
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=false
+      FEAT_SKILLS_SOCIAL=false
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=false
+      FEAT_SKILLS_COMMS=true
+      FEAT_GRANOLA=true
+      ;;
+    developer)
+      # Full-stack developer: all code tools, shell, sandbox, file access
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=true
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=true
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=true
+      FEAT_SHELL_EXEC=true
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=true
+      FEAT_GOOGLE_WORKSPACE=false
+      FEAT_OBSIDIAN_VAULT=true
+      FEAT_CLAUDE_SYNC=true
+      FEAT_TAG_TAXONOMY=false
+      FEAT_GITHUB_BACKUP=true
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=true
+      FEAT_SKILLS_SOCIAL=false
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=true
+      FEAT_SKILLS_COMMS=false
+      FEAT_GRANOLA=false
+      ;;
+    autonomous-agent)
+      # Autonomous SaaS agent: everything on for maximum capability
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=true
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=true
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=true
+      FEAT_SHELL_EXEC=true
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=true
+      FEAT_GOOGLE_WORKSPACE=true
+      FEAT_OBSIDIAN_VAULT=true
+      FEAT_CLAUDE_SYNC=false
+      FEAT_TAG_TAXONOMY=true
+      FEAT_GITHUB_BACKUP=true
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=true
+      FEAT_SKILLS_SOCIAL=true
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=true
+      FEAT_SKILLS_COMMS=true
+      FEAT_GRANOLA=false
+      ;;
+    custom)
+      # Keep defaults, user will toggle individually
+      ;;
+  esac
+}
+
 # ── Feature Toggle Menu ─────────────────────────────────────────────────────
 toggle_features() {
   header "Feature Toggles"
+
+  # Offer presets first
+  echo -e "  ${BOLD}Choose a preset to get started, then customize:${NC}\n"
+  echo -e "  ${BOLD}personal-assistant${NC}  — Messaging, email, calendar, web search, memory."
+  echo -e "                        No coding tools, shell access, or sandboxing."
+  echo -e "                        ${CYAN}Best for: non-technical users who want a smart daily assistant.${NC}\n"
+  echo -e "  ${BOLD}developer${NC}           — Full coding environment: shell, file access, sandbox,"
+  echo -e "                        Claude Code, GitHub backup."
+  echo -e "                        ${CYAN}Best for: software engineers and technical users.${NC}\n"
+  echo -e "  ${BOLD}autonomous-agent${NC}    — Everything enabled. Code, social media, email, browser,"
+  echo -e "                        cron jobs, all skills."
+  echo -e "                        ${CYAN}Best for: autonomous SaaS agents that run a product.${NC}\n"
+  echo -e "  ${BOLD}custom${NC}              — Start from defaults and toggle each feature manually.\n"
+
+  local preset
+  preset=$(ask_choice "Select a preset:" "personal-assistant" "developer" "autonomous-agent" "custom")
+  apply_preset "$preset"
+  success "Preset applied: $preset"
+  echo ""
+
+  if ! ask_yn "Customize individual features?" "n"; then
+    # Skip individual toggles, apply Docker overrides and return
+    # Docker-specific overrides
+    if [[ "$DEPLOY_MODE" == "docker" ]]; then
+      [[ "$FEAT_VOICE" == "true" ]] && { warn "Voice/TTS disabled — not available in Docker containers"; FEAT_VOICE=false; }
+      info "Sandbox auto-enabled — agent is already running in a Docker container"
+      FEAT_SANDBOX=true
+    fi
+    success "Features configured"
+    return
+  fi
+
   echo -e "Toggle features on/off. Press Enter to keep current value.\n"
 
   local features=(
