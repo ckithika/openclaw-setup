@@ -2820,8 +2820,7 @@ SECBLOCK
 ${watchdog_service}
 ${backup_service}
 
-volumes:
-$( [[ -n "$tailscale_service" ]] && echo "  ts-${INSTANCE_NAME}-state:" )
+$( [[ -n "$tailscale_service" ]] && echo "volumes:" && echo "  ts-${INSTANCE_NAME}-state:" )
 COMPOSE
 )
 
