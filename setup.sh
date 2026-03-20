@@ -2741,7 +2741,7 @@ setup_persona() {
   AGENT_VIBE=$(ask_input "Agent personality (e.g., sharp, warm, calm, witty)" "concise and helpful")
 
   # User info
-  USER_NAME=$(ask_input "Your name" "$(whoami)")
+  USER_NAME=$(ask_input "Your name" "")
   USER_TIMEZONE=$(ask_input "Your timezone (e.g., EST, PST, EAT, UTC)" "UTC")
 
   # Purpose — preset-specific defaults
