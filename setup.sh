@@ -2682,11 +2682,9 @@ BACKUP
 
   # Network mode — host networking avoids OrbStack/macOS bridged network issues
   local USE_HOST_NETWORK=false
-  if [[ -z "$network_mode" ]]; then
-    if ask_yn "Use host network mode? (recommended for OrbStack on macOS)" "n"; then
-      USE_HOST_NETWORK=true
-      OLLAMA_HOST="http://localhost:11434"
-    fi
+  if ask_yn "Use host network mode? (recommended for OrbStack on macOS)" "n"; then
+    USE_HOST_NETWORK=true
+    OLLAMA_HOST="http://localhost:11434"
   fi
 
   # Healthcheck port — matches gateway config; with host networking, use the configured port
