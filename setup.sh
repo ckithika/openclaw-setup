@@ -1055,20 +1055,6 @@ setup_channels() {
       warn "  No number provided — WhatsApp will use pairing mode (code exchange required)"
     fi
 
-    if ask_yn "  Enable voice note transcription?" "y"; then
-      FEAT_WHATSAPP_VOICE=true
-      WHATSAPP_VOICE_METHOD=$(ask_choice "  Transcription method:" "local (whisper-cpp, free, runs on device)" "cloud (OpenAI Whisper API, requires API key)")
-      if [[ "$WHATSAPP_VOICE_METHOD" == *"cloud"* ]]; then
-        WHATSAPP_VOICE_METHOD="cloud"
-        if [[ -z "$OPENAI_API_KEY" ]]; then
-          OPENAI_API_KEY=$(ask_secret "  OpenAI API key for Whisper transcription" "OpenAI API key")
-        fi
-        success "  Voice note transcription enabled (OpenAI Whisper API)"
-      else
-        WHATSAPP_VOICE_METHOD="local"
-        success "  Voice note transcription enabled (local whisper-cpp, no API costs)"
-      fi
-    fi
   fi
 
   # ── Telegram credentials ──
@@ -1143,6 +1129,25 @@ setup_channels() {
     echo -e "  - Requires macOS with Messages.app configured"
     echo -e "  - OpenClaw reads/sends via AppleScript bridge"
     echo ""
+  fi
+
+  # ── Voice note transcription (any channel that supports audio) ──
+  if [[ "$CH_WHATSAPP" == "true" || "$CH_TELEGRAM" == "true" || "$CH_DISCORD" == "true" ]]; then
+    echo ""
+    if ask_yn "Enable voice note transcription? (WhatsApp, Telegram, Discord)" "y"; then
+      FEAT_WHATSAPP_VOICE=true
+      WHATSAPP_VOICE_METHOD=$(ask_choice "Transcription method:" "local (whisper-cpp, free, runs on device)" "cloud (OpenAI Whisper API, requires API key)")
+      if [[ "$WHATSAPP_VOICE_METHOD" == *"cloud"* ]]; then
+        WHATSAPP_VOICE_METHOD="cloud"
+        if [[ -z "$OPENAI_API_KEY" ]]; then
+          OPENAI_API_KEY=$(ask_secret "  OpenAI API key for Whisper transcription" "OpenAI API key")
+        fi
+        success "Voice note transcription enabled (OpenAI Whisper API)"
+      else
+        WHATSAPP_VOICE_METHOD="local"
+        success "Voice note transcription enabled (local whisper-cpp, no API costs)"
+      fi
+    fi
   fi
 
   echo ""
@@ -2829,9 +2834,9 @@ TOOLSMD
     if [[ "${WHATSAPP_VOICE_METHOD:-local}" == "local" ]]; then
       cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
 
-## WhatsApp Voice Notes
+## Voice Note Transcription (WhatsApp, Telegram, any channel)
 
-When a voice note arrives, the message body shows `<media:audio>` with a `mediaPath` to the `.ogg` file. **Always transcribe it before responding.**
+When a voice note or audio message arrives on any channel, the message body shows `<media:audio>` with a `mediaPath` to the audio file. **Always transcribe it before responding.**
 
 Steps:
 1. Convert OGG to WAV: `ffmpeg -i <mediaPath> -ar 16000 -ac 1 -c:a pcm_s16le /tmp/voice-note.wav -y`
@@ -2845,9 +2850,9 @@ VOICEMD
     else
       cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
 
-## WhatsApp Voice Notes
+## Voice Note Transcription (WhatsApp, Telegram, any channel)
 
-When a voice note arrives, the message body shows `<media:audio>` with a `mediaPath` to the `.ogg` file. **Always transcribe it before responding.**
+When a voice note or audio message arrives on any channel, the message body shows `<media:audio>` with a `mediaPath` to the audio file. **Always transcribe it before responding.**
 
 Transcribe using the OpenAI Whisper API skill:
 ```bash
