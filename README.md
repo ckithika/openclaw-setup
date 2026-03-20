@@ -129,20 +129,30 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
    - **Sandbox**: auto-enabled, not shown (container is already sandboxed)
    - **Voice/TTS**: not shown (not available in containers)
    - **Claude Sync**: not shown (can't access host Claude settings)
-   - **Browser**: runs headless with `noSandbox: true` automatically
+   - **Browser**: runs headless with `noSandbox: true` automatically; Chromium is auto-installed via a generated Dockerfile
    - All other features work normally
 
-7. **Configure channels** — same as native (tokens prompted).
+7. **Select CLI tools** — the script generates a custom Dockerfile with your selections:
+   - `gh` (GitHub CLI) — repo management, PRs, issues
+   - `doctl` (DigitalOcean CLI) — infrastructure management
+   - `supabase` — database management
+   - `gog` (Google Workspace CLI) — auto-selected if Google Workspace enabled
+   - `xurl` (Twitter/X CLI) — social media posting
+   - Config directories are pre-created to avoid permission errors
 
-8. **Network mode** — you'll be asked:
+8. **Configure channels** — same as native (tokens prompted).
+
+9. **Network mode** — you'll be asked:
    - **Host networking** (recommended for OrbStack on macOS): `network_mode: host` — avoids known Node.js networking issues with OrbStack's bridged network
    - **Bridged networking** (default): standard Docker networking with port mapping, DNS set to `8.8.8.8` and `1.1.1.1`
 
-9. **Optional: Tailscale sidecar** — adds VPN for remote access (skipped if using host networking).
+10. **Optional: Telegram watchdog** — if Telegram is enabled, a sidecar monitors for connectivity loss and auto-restarts the container (recommended for OrbStack).
 
-10. **Optional: Daily backups** — Alpine sidecar container, 7-day retention.
+11. **Optional: Tailscale sidecar** — adds VPN for remote access (skipped if using host networking).
 
-11. **Optional: GitHub backup auto-sync** — uses OpenClaw's built-in cron (every 10 min) instead of macOS launchd.
+12. **Optional: Daily backups** — Alpine sidecar container, 7-day retention.
+
+13. **Optional: GitHub backup auto-sync** — uses OpenClaw's built-in cron (every 10 min) instead of macOS launchd.
 
 12. **Set your environment variables** in the generated `.env` file:
     ```bash
@@ -175,8 +185,10 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
 
 ```
 ~/openclaw-instances/<name>/
-├── docker-compose.yml         # Docker Compose config
-├── .env                       # Environment variables (Tailscale key, etc.)
+├── docker-compose.yml         # Docker Compose config (with sidecars)
+├── Dockerfile                 # Custom image (if browser or CLIs selected)
+├── .env                       # Environment variables (Tailscale, GOG passphrase, etc.)
+├── gitconfig                  # Copied from host (safe mount, not a directory)
 ├── config/
 │   ├── openclaw.json          # Main config
 │   ├── credentials/           # API keys (chmod 700)
@@ -205,38 +217,7 @@ When using host networking:
 
 #### Extending the Docker Image
 
-To add CLIs (e.g., `gh`, `doctl`, `supabase`) for autonomous agents:
-
-```dockerfile
-FROM ghcr.io/openclaw/openclaw:latest
-USER root
-
-# GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh && rm -rf /var/lib/apt/lists/*
-
-# DigitalOcean CLI
-RUN curl -fsSL "https://github.com/digitalocean/doctl/releases/latest/download/doctl-$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//')-linux-$(dpkg --print-architecture).tar.gz" \
-    | tar xz -C /usr/local/bin
-
-# Supabase CLI
-RUN curl -fsSL "https://github.com/supabase/cli/releases/latest/download/supabase_linux_$(dpkg --print-architecture).tar.gz" \
-    | tar xz -C /usr/local/bin supabase
-
-USER node
-```
-
-Update `docker-compose.yml` to build from the Dockerfile:
-```yaml
-services:
-  openclaw-<name>:
-    build: .
-    image: openclaw-<name>:latest
-    # ... rest of config
-```
+The setup script **automatically generates a Dockerfile** when you select browser automation or CLI tools. The generated `docker-compose.yml` uses `build: .` to build from it. To add tools later, edit the generated `Dockerfile` in your instance directory and run `docker compose build`.
 
 #### Mounting Source Code Repos
 

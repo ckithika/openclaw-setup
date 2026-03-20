@@ -2460,30 +2460,191 @@ AGENTS
   success "Workspace initialized at ${WORKSPACE_DIR}"
 }
 
+# ── Dockerfile Generation for Docker Instances ──────────────────────────────
+generate_dockerfile() {
+  # Generates a custom Dockerfile when the instance needs additional tools
+  # beyond what the stock OpenClaw image provides
+  local dockerfile_content="FROM ghcr.io/openclaw/openclaw:latest
+
+USER root
+"
+  local needs_dockerfile=false
+  local config_dirs=()
+
+  # Chromium for browser automation (not in stock image)
+  if [[ "$FEAT_BROWSER" == "true" ]]; then
+    needs_dockerfile=true
+    dockerfile_content+="
+# Chromium for headless browser automation
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    chromium \\
+    chromium-sandbox \\
+    fonts-liberation \\
+    fonts-noto-color-emoji \\
+    && rm -rf /var/lib/apt/lists/*
+"
+  fi
+
+  # CLI tool selection
+  local INSTALL_GH=false INSTALL_DOCTL=false INSTALL_SUPABASE=false INSTALL_GOG=false INSTALL_XURL=false
+
+  echo ""
+  echo -e "  ${BOLD}CLI Tools for Docker Instance${NC}"
+  echo -e "  Select tools to install in the container image.\n"
+
+  if ask_yn "Install GitHub CLI (gh)? — repo management, PRs, issues" "n"; then
+    INSTALL_GH=true
+  fi
+  if ask_yn "Install DigitalOcean CLI (doctl)? — infrastructure management" "n"; then
+    INSTALL_DOCTL=true
+  fi
+  if ask_yn "Install Supabase CLI? — database management" "n"; then
+    INSTALL_SUPABASE=true
+  fi
+  if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
+    INSTALL_GOG=true
+    info "gog CLI will be installed (required for Google Workspace)"
+  fi
+  if ask_yn "Install xurl (Twitter/X CLI)? — social media posting" "n"; then
+    INSTALL_XURL=true
+  fi
+
+  # Generate Dockerfile blocks for selected tools
+  if [[ "$INSTALL_GH" == "true" || "$INSTALL_DOCTL" == "true" || "$INSTALL_SUPABASE" == "true" ]]; then
+    needs_dockerfile=true
+  fi
+  if [[ "$INSTALL_GOG" == "true" || "$INSTALL_XURL" == "true" ]]; then
+    needs_dockerfile=true
+  fi
+
+  if [[ "$INSTALL_GH" == "true" ]]; then
+    config_dirs+=("/home/node/.config/gh")
+    dockerfile_content+="
+# GitHub CLI
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg \\
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\
+    && echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" \\
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \\
+    && apt-get update && apt-get install -y gh \\
+    && rm -rf /var/lib/apt/lists/*
+"
+  fi
+
+  if [[ "$INSTALL_DOCTL" == "true" ]]; then
+    config_dirs+=("/home/node/.config/doctl")
+    dockerfile_content+="
+# DigitalOcean CLI (doctl)
+RUN ARCH=\$(dpkg --print-architecture) && \\
+    curl -fsSL \"https://github.com/digitalocean/doctl/releases/latest/download/doctl-\$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest | grep tag_name | cut -d '\"' -f4 | sed 's/v//')-linux-\${ARCH}.tar.gz\" \\
+    | tar xz -C /usr/local/bin
+"
+  fi
+
+  if [[ "$INSTALL_SUPABASE" == "true" ]]; then
+    config_dirs+=("/home/node/.config/supabase")
+    dockerfile_content+="
+# Supabase CLI
+RUN ARCH=\$(dpkg --print-architecture) && \\
+    curl -fsSL \"https://github.com/supabase/cli/releases/latest/download/supabase_linux_\${ARCH}.tar.gz\" \\
+    | tar xz -C /usr/local/bin supabase
+"
+  fi
+
+  if [[ "$INSTALL_XURL" == "true" ]]; then
+    dockerfile_content+="
+# xurl (Twitter/X CLI)
+RUN npm install -g xurl 2>/dev/null || true
+"
+  fi
+
+  if [[ "$INSTALL_GOG" == "true" ]]; then
+    config_dirs+=("/home/node/.config/gogcli")
+    dockerfile_content+="
+# gog (Google Workspace CLI)
+RUN ARCH=\$(dpkg --print-architecture) && \\
+    VERSION=\$(curl -fsSL https://api.github.com/repos/steipete/gogcli/releases/latest | grep tag_name | cut -d '\"' -f4 | sed 's/v//') && \\
+    curl -fsSL \"https://github.com/steipete/gogcli/releases/download/v\${VERSION}/gogcli_\${VERSION}_linux_\${ARCH}.tar.gz\" \\
+    | tar xz -C /usr/local/bin gog
+"
+  fi
+
+  # Pre-create config directories to avoid permission errors
+  if [[ ${#config_dirs[@]} -gt 0 ]]; then
+    local dirs_joined
+    dirs_joined=$(printf ' \\\n             %s' "${config_dirs[@]}")
+    dockerfile_content+="
+# Pre-create config directories (avoids permission errors on first run)
+RUN mkdir -p${dirs_joined} \\
+    && chown -R node:node /home/node/.config
+"
+  fi
+
+  dockerfile_content+="
+USER node
+"
+
+  if [[ "$needs_dockerfile" == "true" ]]; then
+    echo "$dockerfile_content" > "${INSTANCE_DIR}/Dockerfile"
+    success "Dockerfile generated at ${INSTANCE_DIR}/Dockerfile"
+    return 0  # signals caller to use build: . instead of image:
+  fi
+  return 1  # no Dockerfile needed
+}
+
 # ── [IMPROVEMENT 4] Docker Compose with Backup ──────────────────────────────
 generate_docker_compose() {
   [[ "$DEPLOY_MODE" != "docker" ]] && return
 
   header "Generating Docker Compose"
 
+  # Generate Dockerfile if needed (browser, CLIs)
+  local use_custom_image=false
+  if generate_dockerfile; then
+    use_custom_image=true
+  fi
+
   local chrome_volume=""
   local shm_size='shm_size: "2g"'  # always include — harmless without browser, prevents breakage if enabled later
 
   if [[ "$FEAT_BROWSER" == "true" ]]; then
+    mkdir -p "${INSTANCE_DIR}/chrome-profile"
     chrome_volume="      - ${INSTANCE_DIR}/chrome-profile:/home/node/.config/chromium"
   fi
 
   # Google Workspace volume (persist OAuth tokens)
   local gog_volume=""
+  local gog_env=""
   if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
     mkdir -p "${INSTANCE_DIR}/google-credentials"
     gog_volume="      - ${INSTANCE_DIR}/google-credentials:/home/node/.config/gogcli"
+    gog_env="      - GOG_KEYRING_PASSWORD=\${GOG_PASSPHRASE}
+      - GOG_ACCOUNT=${GOOGLE_WS_EMAIL}"
   fi
 
   # Obsidian vault volume
   local vault_volume=""
   if [[ "$FEAT_OBSIDIAN_VAULT" == "true" && -n "$VAULT_PATH" ]]; then
     vault_volume="      - ${VAULT_PATH}:/home/node/openclaw/vault"
+  fi
+
+  # Safe .gitconfig handling — copy to instance dir to prevent Docker creating a directory
+  local gitconfig_volume=""
+  if [[ -f "$HOME/.gitconfig" ]]; then
+    cp "$HOME/.gitconfig" "${INSTANCE_DIR}/gitconfig"
+    gitconfig_volume="      - ${INSTANCE_DIR}/gitconfig:/home/node/.gitconfig:ro"
+    success "Copied .gitconfig to instance directory"
+  else
+    if ask_yn "No ~/.gitconfig found. Create one for git operations?" "y"; then
+      local git_name git_email
+      git_name=$(ask_input "Git user name" "$(git config user.name 2>/dev/null || echo '')")
+      git_email=$(ask_input "Git email" "$(git config user.email 2>/dev/null || echo '')")
+      printf "[user]\n\tname = %s\n\temail = %s\n" "$git_name" "$git_email" > "${INSTANCE_DIR}/gitconfig"
+      gitconfig_volume="      - ${INSTANCE_DIR}/gitconfig:/home/node/.gitconfig:ro"
+      success "Created gitconfig in instance directory"
+    else
+      warn "Git push/commit inside container may not work without .gitconfig"
+    fi
   fi
 
   # Ask about backup
@@ -2528,6 +2689,52 @@ BACKUP
     fi
   fi
 
+  # Healthcheck port — matches gateway config; with host networking, use the configured port
+  local healthcheck_port=18789
+  if [[ "$USE_HOST_NETWORK" == "true" ]]; then
+    healthcheck_port=${GATEWAY_PORT}
+  fi
+
+  # Telegram watchdog sidecar
+  local watchdog_service=""
+  if [[ "$CH_TELEGRAM" == "true" ]]; then
+    if ask_yn "Add Telegram watchdog? (auto-restarts on connectivity loss, recommended for OrbStack)" "y"; then
+      watchdog_service=$(cat <<WATCHDOG
+
+  telegram-watchdog-${INSTANCE_NAME}:
+    image: docker:cli
+    container_name: telegram-watchdog-${INSTANCE_NAME}
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "Telegram watchdog started"
+        FAIL_COUNT=0
+        while true; do
+          sleep 60
+          ERRORS=\$\$(docker logs --since 2m openclaw-${INSTANCE_NAME} 2>&1 | grep -c "sendMessage failed" || true)
+          if [ "\$\$ERRORS" -gt 5 ]; then
+            FAIL_COUNT=\$\$((FAIL_COUNT + 1))
+            echo "Telegram errors: \$\$ERRORS (strike \$\$FAIL_COUNT/2)"
+            if [ "\$\$FAIL_COUNT" -ge 2 ]; then
+              echo "Restarting openclaw-${INSTANCE_NAME} due to Telegram connectivity loss"
+              docker restart openclaw-${INSTANCE_NAME}
+              FAIL_COUNT=0
+              sleep 30
+            fi
+          else
+            FAIL_COUNT=0
+          fi
+        done
+WATCHDOG
+)
+      success "Telegram watchdog sidecar enabled"
+    fi
+  fi
+
   # Tailscale sidecar
   local tailscale_service=""
   local network_mode=""
@@ -2557,6 +2764,15 @@ TS
     network_mode="    network_mode: service:tailscale-${INSTANCE_NAME}"
   fi
 
+  # Image reference — use build or image depending on Dockerfile
+  local image_ref=""
+  if [[ "$use_custom_image" == "true" ]]; then
+    image_ref="    build: .
+    image: openclaw-${INSTANCE_NAME}:latest"
+  else
+    image_ref="    image: ghcr.io/openclaw/openclaw:latest"
+  fi
+
   local compose
   compose=$(cat <<COMPOSE
 # OpenClaw Docker Instance: ${INSTANCE_NAME}
@@ -2567,7 +2783,7 @@ services:
 ${tailscale_service}
 
   openclaw-${INSTANCE_NAME}:
-    image: ghcr.io/openclaw/openclaw:latest
+${image_ref}
     container_name: openclaw-${INSTANCE_NAME}
 ${network_mode}
 $( [[ -z "$network_mode" ]] && echo "    ports:" && echo "      - \"${GATEWAY_PORT}:18789\"" )
@@ -2577,9 +2793,12 @@ $( [[ -z "$network_mode" ]] && echo "    ports:" && echo "      - \"${GATEWAY_PO
 ${chrome_volume}
 ${gog_volume}
 ${vault_volume}
+${gitconfig_volume}
     environment:
       - OLLAMA_HOST=${OLLAMA_HOST}
       - OPENCLAW_GATEWAY_BIND=0.0.0.0
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+${gog_env}
     ${shm_size}
     restart: unless-stopped
     security_opt:
@@ -2595,11 +2814,12 @@ $( [[ "$USE_HOST_NETWORK" != "true" ]] && cat <<SECBLOCK
 SECBLOCK
 )
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:18789/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:${healthcheck_port}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+${watchdog_service}
 ${backup_service}
 
 volumes:
@@ -2617,6 +2837,14 @@ COMPOSE
 # Tailscale auth key (generate at https://login.tailscale.com/admin/settings/keys)
 TS_AUTHKEY=
 "
+
+  # Google Workspace keyring passphrase
+  if [[ "$FEAT_GOOGLE_WORKSPACE" == "true" ]]; then
+    env_content+="
+# Google Workspace (gog) keyring passphrase — set after running: gog auth add <email>
+GOG_PASSPHRASE=
+"
+  fi
 
   # Add collected channel tokens to .env
   if [[ -n "$TELEGRAM_BOT_TOKEN" && "$TELEGRAM_BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]]; then
