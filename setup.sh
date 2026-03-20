@@ -449,6 +449,7 @@ CH_SLACK=false
 CH_SIGNAL=false
 CH_IMESSAGE=false
 CH_WEBCHAT=true
+WHATSAPP_OWNER_NUMBER=""
 
 # Channel credentials (collected during setup)
 TELEGRAM_BOT_TOKEN=""
@@ -1041,11 +1042,15 @@ setup_channels() {
     echo -e "  ${CYAN}WhatsApp Setup Notes:${NC}"
     echo -e "  - Uses WhatsApp Web protocol (phone must stay online)"
     echo -e "  - QR code pairing happens after setup completes"
-    echo -e "  - Recommended: use a separate phone number, not your primary"
     echo -e "  - Credentials saved to: ${CONFIG_DIR}/credentials/whatsapp/"
     echo ""
-    if ask_yn "  Use a dedicated WhatsApp number (recommended)?" "y"; then
-      info "  Good choice. Have your secondary phone ready for QR scan after setup."
+    WHATSAPP_OWNER_NUMBER=$(ask_input "Your WhatsApp number (e.g., +254712345678) — only this number can chat" "")
+    if [[ -n "$WHATSAPP_OWNER_NUMBER" ]]; then
+      # Strip + and spaces, append WhatsApp suffix
+      WHATSAPP_OWNER_NUMBER=$(echo "$WHATSAPP_OWNER_NUMBER" | tr -d '+ -')
+      success "  WhatsApp restricted to: ${WHATSAPP_OWNER_NUMBER}"
+    else
+      warn "  No number provided — WhatsApp will use pairing mode (code exchange required)"
     fi
   fi
 
@@ -2369,12 +2374,19 @@ CH
   fi
 
   if [[ "$CH_WHATSAPP" == "true" ]]; then
+    local wa_policy="pairing"
+    local wa_allow=""
+    if [[ -n "$WHATSAPP_OWNER_NUMBER" ]]; then
+      wa_policy="allowlist"
+      wa_allow="\"allowFrom\": [\"${WHATSAPP_OWNER_NUMBER}@s.whatsapp.net\"],"
+    fi
     ch_entries+=("$(cat <<CH
     "whatsapp": {
       "enabled": true,
       "accounts": {
         "default": {
-          "dmPolicy": "pairing"
+          ${wa_allow}
+          "dmPolicy": "${wa_policy}"
         }
       }
     }
