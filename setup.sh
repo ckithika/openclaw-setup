@@ -2834,33 +2834,33 @@ TOOLSMD
     if [[ "${WHATSAPP_VOICE_METHOD:-local}" == "local" ]]; then
       cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
 
-## Voice Note Transcription (WhatsApp, Telegram, any channel)
+## Voice Note Transcription — MANDATORY
 
-When a voice note or audio message arrives on any channel, the message body shows `<media:audio>` with a `mediaPath` to the audio file. **Always transcribe it before responding.**
+**RULE: When you see `<media:audio>` in ANY incoming message, you MUST immediately execute these commands. Do NOT describe the process or ask the user to type it out. Just transcribe and respond to the content.**
 
-Steps:
-1. Convert OGG to WAV: `ffmpeg -i <mediaPath> -ar 16000 -ac 1 -c:a pcm_s16le /tmp/voice-note.wav -y`
-2. Transcribe: `whisper-cli -m ~/.local/share/whisper-cpp/ggml-base.bin -f /tmp/voice-note.wav --no-timestamps`
-3. Read the transcript text from the output (appears after the model loading lines)
-4. Respond to the transcript content as if the user typed it
-5. Clean up: `rm /tmp/voice-note.wav`
+The `mediaPath` is provided in the message metadata. Execute:
 
-This runs locally — no API costs.
+```
+ffmpeg -i <mediaPath> -ar 16000 -ac 1 -c:a pcm_s16le /tmp/voice-note.wav -y
+whisper-cli -m ~/.local/share/whisper-cpp/ggml-base.bin -f /tmp/voice-note.wav --no-timestamps
+rm /tmp/voice-note.wav
+```
+
+Read the transcript from whisper-cli output and respond as if the user typed that text.
 VOICEMD
     else
       cat >> "${WORKSPACE_DIR}/TOOLS.md" <<'VOICEMD'
 
-## Voice Note Transcription (WhatsApp, Telegram, any channel)
+## Voice Note Transcription — MANDATORY
 
-When a voice note or audio message arrives on any channel, the message body shows `<media:audio>` with a `mediaPath` to the audio file. **Always transcribe it before responding.**
+**RULE: When you see `<media:audio>` in ANY incoming message, you MUST immediately execute these commands. Do NOT describe the process or ask the user to type it out. Just transcribe and respond to the content.**
 
 Transcribe using the OpenAI Whisper API skill:
-```bash
-/app/skills/openai-whisper-api/scripts/transcribe.sh /path/to/audio.ogg
+```
+/app/skills/openai-whisper-api/scripts/transcribe.sh <mediaPath>
 ```
 
 Read the resulting .txt file for the transcript. Respond as if the user typed that text.
-Supported formats: ogg, mp3, m4a, wav, webm
 VOICEMD
     fi
   fi
