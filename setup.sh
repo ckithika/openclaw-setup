@@ -1650,6 +1650,34 @@ setup_tag_taxonomy() {
 
   header "Tag Taxonomy"
 
+  local taxonomy_file="${VAULT_PATH}/_taxonomy.md"
+
+  # If taxonomy already exists (shared vault), offer to add agent tag or skip
+  if [[ -f "$taxonomy_file" ]]; then
+    info "Existing taxonomy found at ${taxonomy_file}"
+    echo ""
+    if ask_yn "Add a project tag for this agent? (e.g., #project/${INSTANCE_NAME})" "y"; then
+      local agent_tag
+      agent_tag=$(ask_input "Project tag for this agent" "${INSTANCE_NAME}")
+      agent_tag=$(echo "$agent_tag" | xargs)
+      # Append to existing taxonomy if not already there
+      if grep -q "#project/${agent_tag}" "$taxonomy_file" 2>/dev/null; then
+        success "Tag #project/${agent_tag} already exists in taxonomy"
+      else
+        # Insert before the Content Types section, or append at end
+        if grep -q "## Content Types" "$taxonomy_file"; then
+          sed -i.bak "/## Content Types/i\\
+- \`#project/${agent_tag}\`\\
+" "$taxonomy_file" && rm -f "${taxonomy_file}.bak"
+        else
+          echo "- \`#project/${agent_tag}\`" >> "$taxonomy_file"
+        fi
+        success "Added #project/${agent_tag} to existing taxonomy"
+      fi
+    fi
+    return
+  fi
+
   echo -e "  ${CYAN}Define your life areas and projects for auto-tagging.${NC}"
   echo -e "  ${CYAN}These tags will be applied across all knowledge sources.${NC}"
   echo ""
@@ -1665,11 +1693,11 @@ setup_tag_taxonomy() {
   fi
   success "Life areas: ${TAG_LIFE_AREAS[*]}"
 
-  # Projects
+  # Projects — default to agent/instance name
   echo ""
   if ask_yn "Add project tags?" "y"; then
     local projects_input
-    projects_input=$(ask_input "Enter project names (comma-separated)" "")
+    projects_input=$(ask_input "Enter project names (comma-separated)" "${INSTANCE_NAME}")
     if [[ -n "$projects_input" ]]; then
       IFS=',' read -ra TAG_PROJECTS <<< "$projects_input"
       success "Projects: ${TAG_PROJECTS[*]}"
@@ -1677,7 +1705,6 @@ setup_tag_taxonomy() {
   fi
 
   # Generate _taxonomy.md
-  local taxonomy_file="${VAULT_PATH}/_taxonomy.md"
   {
     echo "# Tag Taxonomy"
     echo ""
