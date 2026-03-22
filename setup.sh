@@ -1477,7 +1477,7 @@ run_google_workspace_setup() {
 
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
     local docker_bin="${DOCKER_BIN:-$(command -v docker 2>/dev/null || echo /usr/local/bin/docker)}"
-    run_prefix="$docker_bin compose -f ${INSTANCE_DIR}/docker-compose.yml exec openclaw-${INSTANCE_NAME}"
+    run_prefix="$docker_bin compose -f ${INSTANCE_DIR}/docker-compose.yml exec agent-${INSTANCE_NAME}"
     openclaw_cmd="$run_prefix openclaw"
     gog_cmd="$run_prefix gog"
   fi
@@ -1891,7 +1891,7 @@ setup_skills() {
     {
       echo "#!/usr/bin/env bash"
       echo "# Auto-generated skills installer for ${INSTANCE_NAME}"
-      echo "# Run inside container: docker compose exec openclaw-${INSTANCE_NAME} bash /home/node/openclaw/workspace/install-skills.sh"
+      echo "# Run inside container: docker compose exec agent-${INSTANCE_NAME} bash /home/node/openclaw/workspace/install-skills.sh"
       echo ""
       for skill in "${install_cmds[@]}"; do
         echo "echo 'Installing $skill...' && openclaw skills install $skill"
@@ -3370,10 +3370,10 @@ generate_docker_compose() {
         echo "Starting backup cron..."
         while true; do
           sleep 86400
-          backup_name="openclaw-${INSTANCE_NAME}-\$\$(date +%Y%m%d-%H%M%S).tar.gz"
+          backup_name="agent-${INSTANCE_NAME}-\$\$(date +%Y%m%d-%H%M%S).tar.gz"
           tar czf "/backups/\$\$backup_name" -C /source .
           echo "Backup created: \$\$backup_name"
-          find /backups -name "openclaw-${INSTANCE_NAME}-*.tar.gz" -mtime +7 -delete
+          find /backups -name "agent-${INSTANCE_NAME}-*.tar.gz" -mtime +7 -delete
           echo "Old backups pruned"
         done
     restart: unless-stopped
@@ -3417,13 +3417,13 @@ BACKUP
         FAIL_COUNT=0
         while true; do
           sleep 60
-          ERRORS=\$\$(docker logs --since 2m openclaw-${INSTANCE_NAME} 2>&1 | grep -c "sendMessage failed" || true)
+          ERRORS=\$\$(docker logs --since 2m agent-${INSTANCE_NAME} 2>&1 | grep -c "sendMessage failed" || true)
           if [ "\$\$ERRORS" -gt 5 ]; then
             FAIL_COUNT=\$\$((FAIL_COUNT + 1))
             echo "Telegram errors: \$\$ERRORS (strike \$\$FAIL_COUNT/2)"
             if [ "\$\$FAIL_COUNT" -ge 2 ]; then
-              echo "Restarting openclaw-${INSTANCE_NAME} due to Telegram connectivity loss"
-              docker restart openclaw-${INSTANCE_NAME}
+              echo "Restarting agent-${INSTANCE_NAME} due to Telegram connectivity loss"
+              docker restart agent-${INSTANCE_NAME}
               FAIL_COUNT=0
               sleep 30
             fi
@@ -3445,7 +3445,7 @@ WATCHDOG
     info "Skipping Tailscale — not needed with host networking"
   elif ask_yn "Add Tailscale sidecar for remote access?" "y"; then
     local ts_hostname
-    ts_hostname=$(ask_name "Tailscale hostname for this instance" "openclaw-${INSTANCE_NAME}")
+    ts_hostname=$(ask_name "Tailscale hostname for this instance" "agent-${INSTANCE_NAME}")
     tailscale_service=$(cat <<TS
 
   tailscale-${INSTANCE_NAME}:
@@ -3470,7 +3470,7 @@ TS
   local image_ref=""
   if [[ "$use_custom_image" == "true" ]]; then
     image_ref="    build: .
-    image: openclaw-${INSTANCE_NAME}:latest"
+    image: agent-${INSTANCE_NAME}:latest"
   else
     image_ref="    image: ghcr.io/openclaw/openclaw:latest"
   fi
@@ -3484,9 +3484,9 @@ TS
 services:
 ${tailscale_service}
 
-  openclaw-${INSTANCE_NAME}:
+  agent-${INSTANCE_NAME}:
 ${image_ref}
-    container_name: openclaw-${INSTANCE_NAME}
+    container_name: agent-${INSTANCE_NAME}
 ${network_mode}
 $( [[ -z "$network_mode" ]] && echo "    ports:" && echo "      - \"${GATEWAY_PORT}:18789\"" )
     volumes:
@@ -3635,12 +3635,12 @@ run_channel_pairing() {
         if "$docker_bin" compose -f "${INSTANCE_DIR}/docker-compose.yml" ps &>/dev/null 2>&1; then
           info "Starting WhatsApp pairing inside container..."
           "$docker_bin" compose -f "${INSTANCE_DIR}/docker-compose.yml" \
-            exec "openclaw-${INSTANCE_NAME}" openclaw channels login whatsapp \
-            || warn "WhatsApp pairing failed — retry later with: docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
+            exec "agent-${INSTANCE_NAME}" openclaw channels login whatsapp \
+            || warn "WhatsApp pairing failed — retry later with: docker compose exec agent-${INSTANCE_NAME} openclaw channels login whatsapp"
         else
           warn "Container not running — start it first, then pair:"
           echo "  cd ${INSTANCE_DIR} && docker compose up -d"
-          echo "  docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
+          echo "  docker compose exec agent-${INSTANCE_NAME} openclaw channels login whatsapp"
         fi
       fi
     else
@@ -3648,7 +3648,7 @@ run_channel_pairing() {
       if [[ "$DEPLOY_MODE" == "native" ]]; then
         echo "  openclaw channels login whatsapp"
       else
-        echo "  cd ${INSTANCE_DIR} && docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
+        echo "  cd ${INSTANCE_DIR} && docker compose exec agent-${INSTANCE_NAME} openclaw channels login whatsapp"
       fi
     fi
     echo ""
@@ -3951,10 +3951,10 @@ print_summary() {
     echo "  1. Review config:  cat ${CONFIG_DIR}/openclaw.json"
     echo "  2. Edit .env:      vim ${INSTANCE_DIR}/.env  (add Tailscale key)"
     echo "  3. Start:          cd ${INSTANCE_DIR} && docker compose up -d"
-    echo "  4. View logs:      docker compose logs -f openclaw-${INSTANCE_NAME}"
+    echo "  4. View logs:      docker compose logs -f agent-${INSTANCE_NAME}"
     echo "  5. Open UI:        http://localhost:${GATEWAY_PORT}"
     if [[ "$CH_WHATSAPP" == "true" ]]; then
-      echo "  6. WhatsApp pair:  docker compose exec openclaw-${INSTANCE_NAME} openclaw channels login whatsapp"
+      echo "  6. WhatsApp pair:  docker compose exec agent-${INSTANCE_NAME} openclaw channels login whatsapp"
     fi
     if [[ "$FEAT_OBSIDIAN_VAULT" == "true" && -n "$VAULT_PATH" ]]; then
       echo "  7. Vault mounted:  $VAULT_PATH → /home/node/openclaw/vault"

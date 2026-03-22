@@ -195,19 +195,19 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
 
 18. **Check logs:**
     ```bash
-    docker compose logs -f openclaw-<name>
+    docker compose logs -f agent-<name>
     ```
 
 19. **Pair channels** (e.g., WhatsApp):
     ```bash
-    docker compose exec openclaw-<name> openclaw channels login --channel whatsapp
+    docker compose exec agent-<name> openclaw channels login --channel whatsapp
     ```
 
 20. **Auth CLI tools** (if installed):
     ```bash
-    docker exec -it openclaw-<name> gh auth login
-    docker exec -it openclaw-<name> doctl auth init
-    docker exec -it openclaw-<name> supabase login
+    docker exec -it agent-<name> gh auth login
+    docker exec -it agent-<name> doctl auth init
+    docker exec -it agent-<name> supabase login
     ```
 
 21. **Set up Google Workspace / Gmail** (if gog CLI installed):
@@ -231,8 +231,8 @@ Docker mode runs OpenClaw in an isolated container. Best for work agents, multi-
     5. Copy the credentials and authenticate:
        ```bash
        cp ~/Downloads/client_secret_*.json ~/openclaw-instances/<name>/google-credentials/credentials.json
-       docker exec -it openclaw-<name> gog auth credentials /home/node/.config/gogcli/credentials.json
-       docker exec -it openclaw-<name> gog auth add you@example.com --services gmail,calendar,drive,contacts,docs,sheets --manual
+       docker exec -it agent-<name> gog auth credentials /home/node/.config/gogcli/credentials.json
+       docker exec -it agent-<name> gog auth add you@example.com --services gmail,calendar,drive,contacts,docs,sheets --manual
        ```
     6. Open the URL in your browser, sign in, authorize
     7. The browser will redirect to a page that won't load — copy the **full URL from the address bar** (contains `?code=...`) and paste it back into the terminal
