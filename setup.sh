@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_VERSION="3.0.0"
 
 # ── CLI Flags (process BEFORE terminal guard for CI compatibility) ───────────
+CI_MODE=false
 for arg in "$@"; do
   case "$arg" in
     --version)     echo "openclaw-setup v${SCRIPT_VERSION}"; exit 0 ;;
@@ -17,10 +18,12 @@ for arg in "$@"; do
       echo "  --version      Show script version"
       echo "  --help         Show this help"
       echo "  --if-needed    Run only if OpenClaw not healthy"
+      echo "  --ci-mode      Use defaults for automated testing (no prompts)"
       exit 0
       ;;
-    --reconfigure) shift ;;  # handled later
-    --if-needed) shift ;;   # handled later
+    --reconfigure) shift ;;
+    --if-needed) shift ;;
+    --ci-mode) CI_MODE=true; shift ;;
     --*)         echo "Unknown option: $arg (use --help for usage)" >&2; exit 1 ;;
   esac
 done
@@ -204,6 +207,13 @@ validate_token() {
 # Validated input wrappers
 ask_yn() {
   local prompt="$1" default="${2:-y}"
+  
+  # CI mode: use default
+  if [[ "$CI_MODE" == "true" ]]; then
+    [[ "$default" == "y" ]]
+    return
+  fi
+  
   local yn_hint="[Y/n]"; [[ "$default" == "n" ]] && yn_hint="[y/N]"
   read -rp "$(echo -e "${YELLOW}?${NC} ${prompt} ${yn_hint}: ")" answer || true
   answer="${answer:-$default}"
@@ -213,6 +223,13 @@ ask_yn() {
 
 ask_input() {
   local prompt="$1" default="${2:-}"
+  
+  # CI mode: use defaults without prompting
+  if [[ "$CI_MODE" == "true" ]]; then
+    echo "${default:-ci-test-value}"
+    return 0
+  fi
+  
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
   local attempts=0 max_attempts=3
   while [[ $attempts -lt $max_attempts ]]; do
@@ -237,6 +254,13 @@ ask_input() {
 
 ask_name() {
   local prompt="$1" default="${2:-}"
+  
+  # CI mode: use default or generic name
+  if [[ "$CI_MODE" == "true" ]]; then
+    echo "${default:-ci-test-agent}"
+    return 0
+  fi
+  
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
   local _eof=false
   while true; do
@@ -254,6 +278,13 @@ ask_name() {
 
 ask_port() {
   local prompt="$1" default="${2:-18789}"
+  
+  # CI mode: use default
+  if [[ "$CI_MODE" == "true" ]]; then
+    echo "$default"
+    return 0
+  fi
+  
   local _eof=false
   while true; do
     echo -ne "${YELLOW}?${NC} ${prompt} (default: $default): " >&2
@@ -270,6 +301,13 @@ ask_port() {
 
 ask_path() {
   local prompt="$1" default="${2:-}"
+  
+  # CI mode: use default or temp path
+  if [[ "$CI_MODE" == "true" ]]; then
+    echo "${default:-/tmp/ci-test-vault}"
+    return 0
+  fi
+  
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
   local _eof=false
   while true; do
@@ -287,6 +325,13 @@ ask_path() {
 
 ask_secret() {
   local prompt="$1" label="${2:-token}"
+  
+  # CI mode: skip secrets (return empty)
+  if [[ "$CI_MODE" == "true" ]]; then
+    echo ""
+    return 0
+  fi
+  
   echo -ne "${YELLOW}?${NC} ${prompt}: " >&2
   local answer=""
   read -rs answer || true  # -s hides input; || true handles EOF
@@ -302,6 +347,12 @@ ask_choice() {
   local prompt="$1"; shift
   local options=("$@")
   local count=${#options[@]}
+
+  # CI mode: select first option by default
+  if [[ "$CI_MODE" == "true" ]]; then
+    echo "${options[0]}"
+    return 0
+  fi
 
   echo -e "${YELLOW}?${NC} ${prompt}" >&2
 
