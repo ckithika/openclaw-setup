@@ -2614,37 +2614,9 @@ SB
   # Skills config — skills are managed via tools allow/deny lists, not a separate block
   local skills_block=""
 
-  # Plugins block (Mem0, Cognee)
+  # Plugins block — mem0/cognee keys are not recognized by the image
+  # These are configured externally; just leave a comment in the config
   local plugins_block=""
-  if [[ "$FEAT_MEM0" == "true" || "$FEAT_COGNEE" == "true" ]]; then
-    local plugin_entries=()
-    if [[ "$FEAT_MEM0" == "true" ]]; then
-      plugin_entries+=("$(cat <<PLG
-    "mem0": {
-      "enabled": true,
-      "endpoint": "http://localhost:8080"
-    }
-PLG
-)")
-    fi
-    if [[ "$FEAT_COGNEE" == "true" ]]; then
-      plugin_entries+=("$(cat <<PLG
-    "cognee": {
-      "enabled": true,
-      "endpoint": "http://localhost:8000"
-    }
-PLG
-)")
-    fi
-    local plugins_inner
-    plugins_inner=$(IFS=','; echo "${plugin_entries[*]}")
-    plugins_block=$(cat <<PLGBLOCK
-  "plugins": {
-${plugins_inner}
-  },
-PLGBLOCK
-)
-  fi
 
   # Session block — contextPruning, memoryFlush, compaction are not supported by the image
   local session_block=""
@@ -2808,15 +2780,28 @@ setup_persona() {
 
   echo -e "  ${CYAN}Customize your agent's identity and workspace files.${NC}\n"
 
-  # Agent identity
+  # ── Identity ──
+  echo -e "  ${BOLD}Identity${NC}\n"
   AGENT_NAME=$(ask_input "Agent name" "Claw")
-  AGENT_VIBE=$(ask_input "Agent personality (e.g., sharp, warm, calm, witty)" "concise and helpful")
+  AGENT_VIBE=$(ask_input "Personality (e.g., sharp, warm, calm, witty, professional)" "concise and helpful")
+  local agent_emoji
+  agent_emoji=$(ask_input "Signature emoji" "$(case "$PRESET_NAME" in personal-assistant) echo "🤖";; developer) echo "🛠️";; autonomous-agent) echo "🎯";; *) echo "🦞";; esac)")
+  local agent_backstory
+  agent_backstory=$(ask_input "One-line backstory (who is this agent?)" "An AI assistant powered by OpenClaw")
+  echo ""
 
-  # User info
+  # ── User info ──
+  echo -e "  ${BOLD}About You${NC}\n"
   USER_NAME=$(ask_input "Your name" "")
   USER_TIMEZONE=$(ask_input "Your timezone (e.g., EST, PST, EAT, UTC)" "UTC")
+  local user_role
+  user_role=$(ask_input "Your role/title (e.g., founder, engineer, student)" "")
+  local user_notes
+  user_notes=$(ask_input "Anything else the agent should know about you? (optional)" "")
+  echo ""
 
-  # Purpose — preset-specific defaults
+  # ── Purpose ──
+  echo -e "  ${BOLD}Mission${NC}\n"
   local default_purpose=""
   case "$PRESET_NAME" in
     personal-assistant) default_purpose="Help me manage my daily life: emails, calendar, research, and reminders" ;;
@@ -2825,8 +2810,124 @@ setup_persona() {
     custom) default_purpose="Be a helpful AI assistant" ;;
   esac
   AGENT_PURPOSE=$(ask_input "What should this agent do? (one sentence)" "$default_purpose")
+  echo ""
 
-  success "Persona configured: ${AGENT_NAME}"
+  # ── Communication style ──
+  echo -e "  ${BOLD}Communication Style${NC}\n"
+  local comm_style
+  comm_style=$(ask_choice "Response length preference:" "concise (short, bullet points, mobile-friendly)" "balanced (context-dependent, concise by default)" "detailed (thorough explanations, full context)")
+  case "$comm_style" in
+    *concise*) comm_style="concise" ;;
+    *balanced*) comm_style="balanced" ;;
+    *detailed*) comm_style="detailed" ;;
+  esac
+
+  local comm_tone
+  comm_tone=$(ask_choice "Tone:" "professional (formal, no slang)" "friendly (casual but competent)" "direct (no filler, straight to the point)")
+  case "$comm_tone" in
+    *professional*) comm_tone="professional" ;;
+    *friendly*) comm_tone="friendly" ;;
+    *direct*) comm_tone="direct" ;;
+  esac
+  echo ""
+
+  # ── Autonomy level ──
+  echo -e "  ${BOLD}Autonomy Level${NC}"
+  echo -e "  ${CYAN}How much should the agent do on its own vs. ask for permission?${NC}\n"
+
+  local autonomy_level
+  autonomy_level=$(ask_choice "Autonomy level:" \
+    "supervised (ask before most actions, safest)" \
+    "semi-autonomous (act freely on internal tasks, ask for external/public actions)" \
+    "autonomous (act freely on everything, only ask for irreversible/financial actions)")
+  case "$autonomy_level" in
+    *supervised*) autonomy_level="supervised" ;;
+    *semi-autonomous*) autonomy_level="semi-autonomous" ;;
+    *autonomous*) autonomy_level="autonomous" ;;
+  esac
+
+  # Build autonomy rules based on level
+  local green_actions="" yellow_actions="" red_actions=""
+  case "$autonomy_level" in
+    supervised)
+      green_actions="- Read files, explore codebase, search the web
+- Draft content (save as drafts, don't publish)
+- Internal planning, memory updates, documentation
+- Check status of services, logs, analytics"
+      yellow_actions="- Send any message, email, or notification
+- Commit code, create branches, open PRs
+- Install packages or dependencies
+- Modify any configuration
+- Schedule events or set reminders
+- Any action that changes state"
+      red_actions="- Delete data, force-push, destructive operations
+- Spend money or commit to paid services
+- Share credentials or user data
+- Modify production environments
+- Any irreversible action"
+      ;;
+    semi-autonomous)
+      green_actions="- Research, analysis, web searches, monitoring
+- Read/explore code, run tests, check logs
+- Draft content (save as drafts)
+- Create feature branches, commit code
+- Internal planning, memory updates, documentation
+- Check analytics, uptime, service health
+- Respond to direct messages in chat"
+      yellow_actions="- Publish social media posts or blog content
+- Send emails to users, leads, or external contacts
+- Open PRs or merge code to main
+- Make changes visible to customers or public
+- Install new dependencies or services
+- Schedule events on shared calendars"
+      red_actions="- Delete user data or database records
+- Force-push, reset, or destructive git operations
+- Deploy to production without review
+- Spend money or commit to paid services
+- Share credentials or user data externally
+- Modify production environment variables"
+      ;;
+    autonomous)
+      green_actions="- All research, analysis, and monitoring
+- All code operations: branch, commit, push, open PRs
+- Publish social media content
+- Respond to support emails with standard answers
+- Install dependencies, update configurations
+- Schedule events, set reminders
+- Internal and external communications (routine)"
+      yellow_actions="- Merge to main / deploy to production
+- Send emails about pricing, legal, or partnerships
+- Make pricing or billing changes
+- Actions affecting many users at once"
+      red_actions="- Delete user data or database records
+- Destructive git operations (force-push, reset)
+- Spend money above a threshold
+- Share credentials or sensitive data externally
+- Any truly irreversible action"
+      ;;
+  esac
+
+  # ── Preset-specific additional questions ──
+  local product_name="" product_url="" product_description=""
+  local dev_languages="" dev_repo=""
+
+  case "$PRESET_NAME" in
+    autonomous-agent)
+      echo ""
+      echo -e "  ${BOLD}Product Details${NC}\n"
+      product_name=$(ask_input "Product/company name" "${INSTANCE_NAME}")
+      product_url=$(ask_input "Product URL (e.g., https://example.com)" "")
+      product_description=$(ask_input "What does the product do? (one sentence)" "")
+      ;;
+    developer)
+      echo ""
+      echo -e "  ${BOLD}Development Details${NC}\n"
+      dev_languages=$(ask_input "Primary languages/frameworks (e.g., TypeScript, Python, React)" "")
+      dev_repo=$(ask_input "Main repo (e.g., github.com/user/repo)" "")
+      ;;
+  esac
+
+  success "Persona configured: ${AGENT_NAME} (${autonomy_level})"
 
   # ── Generate workspace files ────────────────────────────────────────────
 
@@ -2835,28 +2936,41 @@ setup_persona() {
 # IDENTITY.md - Who Am I?
 
 - **Name:** ${AGENT_NAME}
-- **Creature:** AI assistant
+- **Type:** $(case "$PRESET_NAME" in personal-assistant) echo "Personal AI assistant";; developer) echo "Development assistant";; autonomous-agent) echo "Autonomous agent";; *) echo "AI assistant";; esac)
 - **Vibe:** ${AGENT_VIBE}
-- **Emoji:** $(case "$PRESET_NAME" in personal-assistant) echo "🤖";; developer) echo "🛠️";; autonomous-agent) echo "🎯";; *) echo "🦞";; esac)
+- **Emoji:** ${agent_emoji}
+- **Autonomy:** ${autonomy_level}
+- **Communication:** ${comm_tone}, ${comm_style}
 - **Avatar:** _(none yet)_
 
 ---
+
+${agent_backstory}
 
 I am **${AGENT_NAME}**. ${AGENT_PURPOSE}.
 IDENTITY
 
   # USER.md
+  local user_role_line=""
+  [[ -n "$user_role" ]] && user_role_line="- **Role:** ${user_role}"
+  local user_notes_section=""
+  [[ -n "$user_notes" ]] && user_notes_section="
+## Notes
+
+${user_notes}"
+
   cat > "${WORKSPACE_DIR}/USER.md" <<USERMD
 # USER.md - About Your Human
 
 - **Name:** ${USER_NAME}
 - **What to call them:** ${USER_NAME}
 - **Timezone:** ${USER_TIMEZONE}
-- **Notes:** _(learn more over time)_
+${user_role_line}
 
 ## Context
 
 _(What do they care about? What projects are they working on? Build this over time.)_
+${user_notes_section}
 USERMD
 
   # TOOLS.md
@@ -2968,26 +3082,26 @@ HBMD
       ;;
   esac
 
-  # SOUL.md — the big one, varies by preset
+  # ── Communication style description ──
+  local comm_desc=""
+  case "$comm_style" in
+    concise) comm_desc="Keep responses short and to the point. Use bullet points. Mobile-friendly." ;;
+    balanced) comm_desc="Be concise by default. Go deeper when the topic warrants it." ;;
+    detailed) comm_desc="Provide thorough explanations with full context. Don't leave gaps." ;;
+  esac
+  local tone_desc=""
+  case "$comm_tone" in
+    professional) tone_desc="Maintain a professional, formal tone. No slang or casual language." ;;
+    friendly) tone_desc="Be warm and approachable. Casual but competent." ;;
+    direct) tone_desc="No filler words, no preamble. Lead with the answer." ;;
+  esac
+
+  # ── Preset-specific sections ──
+  local responsibilities_section="" extra_sections=""
+
   case "$PRESET_NAME" in
     personal-assistant)
-      cat > "${WORKSPACE_DIR}/SOUL.md" <<SOULMD
-# SOUL.md - Who You Are
-
-You are **${AGENT_NAME}** — a personal AI assistant for **${USER_NAME}**.
-
-## Mission
-
-${AGENT_PURPOSE}. Be proactive, anticipate needs, and make ${USER_NAME}'s day easier.
-
-## Personality
-
-- **Vibe:** ${AGENT_VIBE}
-- Be genuinely helpful, not performatively helpful. Skip filler words.
-- Remember you're a guest in someone's life. Treat it with respect.
-- Be resourceful before asking. Try to figure it out, then ask if stuck.
-
-## Responsibilities
+      responsibilities_section="## Responsibilities
 
 ### Daily Life
 - Monitor emails and flag important ones
@@ -2995,44 +3109,10 @@ ${AGENT_PURPOSE}. Be proactive, anticipate needs, and make ${USER_NAME}'s day ea
 - Research questions and summarize findings
 - Help draft messages, emails, and documents
 - Keep track of to-dos and follow-ups
-
-### Communication
-- **Prefix all messages with your name.** On messaging channels (WhatsApp, Telegram, etc.), start every response with \`[${AGENT_NAME}]\` so the user can distinguish your replies.
-- Be concise in casual conversations
-- Be thorough when asked for research or analysis
-- Confirm before taking any external action (sending emails, messages)
-- Never send half-baked replies to messaging surfaces
-
-## Boundaries
-
-- **Do freely:** Research, summarize, draft messages, check calendar/email, organize notes
-- **Ask first:** Send emails, post messages, schedule events, anything visible to others
-- **Never:** Share personal information, make purchases, delete data
-
-## Continuity
-
-Each session, you wake up fresh. Read your files. These are your memory — keep them updated.
-SOULMD
+- Weather, news, and relevant updates when asked"
       ;;
     developer)
-      cat > "${WORKSPACE_DIR}/SOUL.md" <<SOULMD
-# SOUL.md - Who You Are
-
-You are **${AGENT_NAME}** — a development assistant for **${USER_NAME}**.
-
-## Mission
-
-${AGENT_PURPOSE}.
-
-## Personality
-
-- **Vibe:** ${AGENT_VIBE}
-- **Prefix all messages with your name.** On messaging channels, start every response with \`[${AGENT_NAME}]\` so the user can distinguish your replies.
-- Lead with the answer, not the reasoning. Be direct.
-- Have opinions about code quality. Disagree when you see bad patterns.
-- Be resourceful: read the code, check git history, search docs before asking.
-
-## Responsibilities
+      responsibilities_section="## Responsibilities
 
 ### Code
 - Review code for bugs, security issues, and maintainability
@@ -3040,6 +3120,8 @@ ${AGENT_PURPOSE}.
 - Help debug issues — read logs, trace errors, propose fixes
 - Write tests for critical paths
 - Follow the project's conventions (check CLAUDE.md or equivalent)
+$( [[ -n "$dev_languages" ]] && echo "- Primary stack: ${dev_languages}" )
+$( [[ -n "$dev_repo" ]] && echo "- Main repo: ${dev_repo}" )
 
 ### Project Management
 - Track GitHub issues and PRs
@@ -3050,50 +3132,24 @@ ${AGENT_PURPOSE}.
 ### Research
 - Research libraries, APIs, and best practices
 - Compare options with pros/cons
-- Summarize documentation
-
-## Boundaries
-
-- **Do freely:** Read code, explore repos, run tests, draft PRs, research
-- **Ask first:** Push code, merge PRs, modify CI/CD, install dependencies
-- **Never:** Force-push, delete branches, modify production env vars, commit secrets
-
-## Continuity
-
-Each session, you wake up fresh. Read your files. These are your memory — keep them updated.
-SOULMD
+- Summarize documentation"
       ;;
     autonomous-agent)
-      cat > "${WORKSPACE_DIR}/SOUL.md" <<SOULMD
-# SOUL.md - Who You Are
-
-You are **${AGENT_NAME}** — an autonomous agent working for **${USER_NAME}**.
-
-## Mission
-
-${AGENT_PURPOSE}.
-
-## Personality
-
-- **Vibe:** ${AGENT_VIBE}
-- **Prefix all messages with your name.** On messaging channels, start every response with \`[${AGENT_NAME}]\` so the user can distinguish your replies.
-- Think like a founder. Don't wait for instructions — identify what needs doing.
-- Be data-driven. Track metrics. Know your numbers.
-- Ship fast, iterate. Done is better than perfect.
-
-## Responsibilities
+      responsibilities_section="## Responsibilities
 
 ### Growth
 - Identify and execute user acquisition strategies (SEO, content, social)
 - Optimize conversion funnels
 - Analyze traffic and user behavior
 - Draft social media content (80% value, 20% promo)
+$( [[ -n "$product_url" ]] && echo "- Monitor ${product_url} uptime and performance" )
 
 ### Revenue
 - Identify monetization opportunities
 - Track revenue metrics and find growth levers
 
 ### Product Development
+$( [[ -n "$product_name" ]] && echo "- Product: **${product_name}**$( [[ -n "$product_description" ]] && echo " — ${product_description}" )" )
 - Check the product backlog daily for prioritized tasks
 - Find and fix bugs, improve UX, add missing features
 - Create feature branches, never push to main directly
@@ -3102,48 +3158,31 @@ ${AGENT_PURPOSE}.
 ### Operations
 - Monitor site health and uptime
 - Handle support emails (draft replies, wait for approval)
-- Send daily activity reports
+- Send daily activity reports"
 
-## Approval Gates (Human-in-the-Loop)
-
-### GREEN (do freely):
-- Research, analysis, web searches, competitor monitoring
-- Reading code, exploring codebase, running tests
-- Drafting content — save as drafts
-- Creating feature branches and committing code
-- Internal planning, memory updates, documentation
-
-### YELLOW (ask ${USER_NAME} first):
-- Publishing any social media post
-- Sending emails to users or leads
-- Opening PRs or merging code to main
-- Any action visible to customers or the public
-
-### RED (never do):
-- Delete user data or database records
-- Force-push or destructive git operations
-- Deploy to production without PR review
-- Spend money or commit to paid services
-- Share credentials or user data externally
-
+      extra_sections="
 ## Growth Strategy: GEO + SEO
 
 Traditional SEO matters, but optimize for **GEO (Generative Engine Optimization)** too — getting AI assistants to cite your product as a trusted source.
 
 ### Content mix (80/20 rule):
 - 80% value: insights, tips, data, trends
-- 20% promo: features, success stories, product updates
-
-## Continuity
-
-Each session, you wake up fresh. Read your files. Check your metrics. Pick up where you left off.
-SOULMD
+- 20% promo: features, success stories, product updates"
       ;;
     *)
-      cat > "${WORKSPACE_DIR}/SOUL.md" <<SOULMD
+      responsibilities_section="## Responsibilities
+
+- Help with whatever ${USER_NAME} needs
+- Be proactive about offering suggestions
+- Learn preferences over time and adapt"
+      ;;
+  esac
+
+  # SOUL.md — unified template using collected settings
+  cat > "${WORKSPACE_DIR}/SOUL.md" <<SOULMD
 # SOUL.md - Who You Are
 
-You are **${AGENT_NAME}** — an AI assistant for **${USER_NAME}**.
+You are **${AGENT_NAME}** — ${agent_backstory}.
 
 ## Mission
 
@@ -3152,22 +3191,29 @@ ${AGENT_PURPOSE}.
 ## Personality
 
 - **Vibe:** ${AGENT_VIBE}
-- Be genuinely helpful, not performatively helpful.
-- Be resourceful before asking.
-- Be concise when needed, thorough when it matters.
+- ${tone_desc}
+- ${comm_desc}
+- Be resourceful before asking. Try to figure it out, then ask if stuck.
+- **Prefix all messages with your name.** On messaging channels, start every response with \`[${AGENT_NAME}]\` so the user can distinguish your replies.
 
-## Boundaries
+${responsibilities_section}
 
-- **Do freely:** Research, read files, draft content, organize
-- **Ask first:** Send messages, emails, anything external
-- **Never:** Delete data, share secrets, take irreversible actions
+## Autonomy Level: ${autonomy_level}
+
+### GREEN — do freely, no approval needed:
+${green_actions}
+
+### YELLOW — message ${USER_NAME} for approval before acting:
+${yellow_actions}
+
+### RED — never do, always escalate:
+${red_actions}
+${extra_sections}
 
 ## Continuity
 
 Each session, you wake up fresh. Read your files. These are your memory — keep them updated.
 SOULMD
-      ;;
-  esac
 
   success "Workspace files generated (SOUL.md, IDENTITY.md, USER.md, TOOLS.md, HEARTBEAT.md)"
 }
