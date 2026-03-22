@@ -866,6 +866,122 @@ apply_preset() {
       FEAT_SKILLS_COMMS=true
       FEAT_GRANOLA=false
       ;;
+    content-creator)
+      # Content creators: social media, browser, scheduling, media tools
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=false
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=false
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=true
+      FEAT_SHELL_EXEC=true
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=false
+      FEAT_GOOGLE_WORKSPACE=true
+      FEAT_OBSIDIAN_VAULT=true
+      FEAT_CLAUDE_SYNC=false
+      FEAT_TAG_TAXONOMY=true
+      FEAT_GITHUB_BACKUP=false
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=true
+      FEAT_SKILLS_SOCIAL=true
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=false
+      FEAT_SKILLS_COMMS=true
+      FEAT_GRANOLA=false
+      ;;
+    ecommerce)
+      # E-commerce: browser, email, inventory, customer service
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=false
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=false
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=true
+      FEAT_SHELL_EXEC=false
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=false
+      FEAT_GOOGLE_WORKSPACE=true
+      FEAT_OBSIDIAN_VAULT=false
+      FEAT_CLAUDE_SYNC=false
+      FEAT_TAG_TAXONOMY=false
+      FEAT_GITHUB_BACKUP=false
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=false
+      FEAT_SKILLS_SOCIAL=true
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=false
+      FEAT_SKILLS_COMMS=true
+      FEAT_GRANOLA=false
+      ;;
+    sales)
+      # Sales/outreach: browser, email, CRM, research, prospecting
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=false
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=false
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=true
+      FEAT_SHELL_EXEC=false
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=false
+      FEAT_GOOGLE_WORKSPACE=true
+      FEAT_OBSIDIAN_VAULT=true
+      FEAT_CLAUDE_SYNC=false
+      FEAT_TAG_TAXONOMY=false
+      FEAT_GITHUB_BACKUP=false
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=true
+      FEAT_SKILLS_SOCIAL=true
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=false
+      FEAT_SKILLS_COMMS=true
+      FEAT_GRANOLA=true
+      ;;
+    family)
+      # Family/household: calendar, reminders, messaging, shopping, finance
+      FEAT_BROWSER=true
+      FEAT_SANDBOX=false
+      FEAT_CRON=true
+      FEAT_MEMORY=true
+      FEAT_SKILLS=true
+      FEAT_CODE_EXEC=false
+      FEAT_WEB_SEARCH=true
+      FEAT_WEB_FETCH=true
+      FEAT_FILE_ACCESS=false
+      FEAT_SHELL_EXEC=false
+      FEAT_MESSAGING=true
+      FEAT_VOICE=false
+      FEAT_CLAUDE_CODE=false
+      FEAT_GOOGLE_WORKSPACE=true
+      FEAT_OBSIDIAN_VAULT=false
+      FEAT_CLAUDE_SYNC=false
+      FEAT_TAG_TAXONOMY=false
+      FEAT_GITHUB_BACKUP=false
+      FEAT_MEM0=false
+      FEAT_COGNEE=false
+      FEAT_SKILLS_PRODUCTIVITY=false
+      FEAT_SKILLS_SOCIAL=false
+      FEAT_SKILLS_RESEARCH=true
+      FEAT_SKILLS_SECURITY=false
+      FEAT_SKILLS_COMMS=false
+      FEAT_GRANOLA=false
+      ;;
     custom)
       # Keep defaults, user will toggle individually
       ;;
@@ -878,19 +994,24 @@ toggle_features() {
 
   # Offer presets first
   echo -e "  ${BOLD}Choose a preset to get started, then customize:${NC}\n"
-  echo -e "  ${BOLD}personal-assistant${NC}  — Messaging, email, calendar, web search, memory."
-  echo -e "                        No coding tools, shell access, or sandboxing."
-  echo -e "                        ${CYAN}Best for: non-technical users who want a smart daily assistant.${NC}\n"
-  echo -e "  ${BOLD}developer${NC}           — Full coding environment: shell, file access, sandbox,"
-  echo -e "                        Claude Code, GitHub backup."
-  echo -e "                        ${CYAN}Best for: software engineers and technical users.${NC}\n"
-  echo -e "  ${BOLD}autonomous-agent${NC}    — Everything enabled. Code, social media, email, browser,"
-  echo -e "                        cron jobs, all skills."
-  echo -e "                        ${CYAN}Best for: autonomous SaaS agents that run a product.${NC}\n"
+  echo -e "  ${BOLD}personal-assistant${NC}  — Emails, calendar, reminders, research, web search."
+  echo -e "                        ${CYAN}Best for: daily life management, non-technical users.${NC}\n"
+  echo -e "  ${BOLD}developer${NC}           — Shell, file access, sandbox, Claude Code, GitHub."
+  echo -e "                        ${CYAN}Best for: software engineers, code review, debugging.${NC}\n"
+  echo -e "  ${BOLD}autonomous-agent${NC}    — Everything: code, social, email, browser, cron, all skills."
+  echo -e "                        ${CYAN}Best for: running a SaaS product autonomously.${NC}\n"
+  echo -e "  ${BOLD}content-creator${NC}     — Social media, scheduling, browser, media tools."
+  echo -e "                        ${CYAN}Best for: podcasts, YouTube, TikTok, blogs, newsletters.${NC}\n"
+  echo -e "  ${BOLD}ecommerce${NC}           — Email, browser, inventory, customer service."
+  echo -e "                        ${CYAN}Best for: online stores, dropshipping, WooCommerce.${NC}\n"
+  echo -e "  ${BOLD}sales${NC}               — Prospecting, CRM, email outreach, research."
+  echo -e "                        ${CYAN}Best for: sales teams, lead generation, deal management.${NC}\n"
+  echo -e "  ${BOLD}family${NC}              — Calendar, shopping, meals, school, finance."
+  echo -e "                        ${CYAN}Best for: household management, family coordination.${NC}\n"
   echo -e "  ${BOLD}custom${NC}              — Start from defaults and toggle each feature manually.\n"
 
   local preset
-  preset=$(ask_choice "Select a preset:" "personal-assistant" "developer" "autonomous-agent" "custom")
+  preset=$(ask_choice "Select a preset:" "personal-assistant" "developer" "autonomous-agent" "content-creator" "ecommerce" "sales" "family" "custom")
   PRESET_NAME="$preset"
   apply_preset "$preset"
   success "Preset applied: $preset"
@@ -2785,7 +2906,7 @@ setup_persona() {
   AGENT_NAME=$(ask_input "Agent name" "Claw")
   AGENT_VIBE=$(ask_input "Personality (e.g., sharp, warm, calm, witty, professional)" "concise and helpful")
   local agent_emoji
-  agent_emoji=$(ask_input "Signature emoji" "$(case "$PRESET_NAME" in personal-assistant) echo "🤖";; developer) echo "🛠️";; autonomous-agent) echo "🎯";; *) echo "🦞";; esac)")
+  agent_emoji=$(ask_input "Signature emoji" "$(case "$PRESET_NAME" in personal-assistant) echo "🤖";; developer) echo "🛠️";; autonomous-agent) echo "🎯";; content-creator) echo "🎬";; ecommerce) echo "🛒";; sales) echo "📈";; family) echo "🏠";; *) echo "🦞";; esac)")
   local agent_backstory
   agent_backstory=$(ask_input "One-line backstory (who is this agent?)" "An AI assistant powered by OpenClaw")
   echo ""
@@ -2807,6 +2928,10 @@ setup_persona() {
     personal-assistant) default_purpose="Help me manage my daily life: emails, calendar, research, and reminders" ;;
     developer) default_purpose="Help me write code, review PRs, debug issues, and manage projects" ;;
     autonomous-agent) default_purpose="Run my product autonomously: grow users, manage code, post content, handle support" ;;
+    content-creator) default_purpose="Help me create, schedule, and grow my content across social media platforms" ;;
+    ecommerce) default_purpose="Manage my online store: customer support, inventory, marketing, and order fulfillment" ;;
+    sales) default_purpose="Find prospects, personalize outreach, manage deals, and close more sales" ;;
+    family) default_purpose="Help our family stay organized: meals, groceries, school, calendar, and finances" ;;
     custom) default_purpose="Be a helpful AI assistant" ;;
   esac
   AGENT_PURPOSE=$(ask_input "What should this agent do? (one sentence)" "$default_purpose")
@@ -2910,6 +3035,10 @@ setup_persona() {
   # ── Preset-specific additional questions ──
   local product_name="" product_url="" product_description=""
   local dev_languages="" dev_repo=""
+  local content_platforms="" content_niche=""
+  local store_platform="" store_url=""
+  local sales_crm="" sales_target=""
+  local family_members=""
 
   case "$PRESET_NAME" in
     autonomous-agent)
@@ -2925,6 +3054,29 @@ setup_persona() {
       dev_languages=$(ask_input "Primary languages/frameworks (e.g., TypeScript, Python, React)" "")
       dev_repo=$(ask_input "Main repo (e.g., github.com/user/repo)" "")
       ;;
+    content-creator)
+      echo ""
+      echo -e "  ${BOLD}Content Details${NC}\n"
+      content_platforms=$(ask_input "Platforms (e.g., YouTube, TikTok, X, blog, podcast)" "")
+      content_niche=$(ask_input "Niche/topic (e.g., tech reviews, cooking, fitness)" "")
+      ;;
+    ecommerce)
+      echo ""
+      echo -e "  ${BOLD}Store Details${NC}\n"
+      store_platform=$(ask_input "Platform (e.g., Shopify, WooCommerce, custom)" "")
+      store_url=$(ask_input "Store URL" "")
+      ;;
+    sales)
+      echo ""
+      echo -e "  ${BOLD}Sales Details${NC}\n"
+      sales_target=$(ask_input "Target market (e.g., SaaS founders, SMBs, enterprise)" "")
+      sales_crm=$(ask_input "CRM tool (e.g., HubSpot, Salesforce, Linear, none)" "none")
+      ;;
+    family)
+      echo ""
+      echo -e "  ${BOLD}Family Details${NC}\n"
+      family_members=$(ask_input "Family members (e.g., partner, 2 kids ages 8 and 5)" "")
+      ;;
   esac
 
   success "Persona configured: ${AGENT_NAME} (${autonomy_level})"
@@ -2936,7 +3088,7 @@ setup_persona() {
 # IDENTITY.md - Who Am I?
 
 - **Name:** ${AGENT_NAME}
-- **Type:** $(case "$PRESET_NAME" in personal-assistant) echo "Personal AI assistant";; developer) echo "Development assistant";; autonomous-agent) echo "Autonomous agent";; *) echo "AI assistant";; esac)
+- **Type:** $(case "$PRESET_NAME" in personal-assistant) echo "Personal AI assistant";; developer) echo "Development assistant";; autonomous-agent) echo "Autonomous agent";; content-creator) echo "Content creation agent";; ecommerce) echo "E-commerce agent";; sales) echo "Sales agent";; family) echo "Family assistant";; *) echo "AI assistant";; esac)
 - **Vibe:** ${AGENT_VIBE}
 - **Emoji:** ${agent_emoji}
 - **Autonomy:** ${autonomy_level}
@@ -3072,6 +3224,105 @@ HBMD
 - If nothing needs attention, reply HEARTBEAT_OK
 HBMD
       ;;
+    content-creator)
+      cat > "${WORKSPACE_DIR}/HEARTBEAT.md" <<'HBMD'
+# HEARTBEAT.md
+
+## Checks (rotate through, 2-4x per day)
+- [ ] Check social media engagement on recent posts (likes, comments, shares)
+- [ ] Check for unread messages and DMs across platforms
+- [ ] Research trending topics in your niche
+- [ ] Review scheduled content — any gaps in the pipeline?
+- [ ] Check analytics: which content performed best this week?
+
+## Weekly
+- [ ] Draft content calendar for next week
+- [ ] Review competitor content for inspiration
+- [ ] Check for collaboration/partnership opportunities
+
+## Rules
+- Late night (23:00-07:00): skip all checks
+- If nothing needs attention, reply HEARTBEAT_OK
+HBMD
+      ;;
+    ecommerce)
+      cat > "${WORKSPACE_DIR}/HEARTBEAT.md" <<'HBMD'
+# HEARTBEAT.md
+
+## Priority Checks (every heartbeat)
+- [ ] Check for new customer support emails/messages
+- [ ] Check for new orders needing attention
+- [ ] Check inventory levels — flag low stock items
+
+## Daily Checks
+- [ ] Review sales metrics (orders, revenue, conversion rate)
+- [ ] Check for abandoned carts — draft follow-up emails
+- [ ] Review customer reviews/feedback
+- [ ] Check shipping/fulfillment status
+
+## Weekly
+- [ ] Competitor price check
+- [ ] Review top-selling and slow-moving products
+- [ ] Draft promotional content for upcoming sales
+
+## Rules
+- Customer support queries: draft reply within 1 heartbeat, ask for approval
+- Low inventory alerts: message owner immediately
+- If nothing needs attention, reply HEARTBEAT_OK
+HBMD
+      ;;
+    sales)
+      cat > "${WORKSPACE_DIR}/HEARTBEAT.md" <<'HBMD'
+# HEARTBEAT.md
+
+## Priority Checks (every heartbeat)
+- [ ] Check for new inbound leads/emails
+- [ ] Check for replies to outreach emails
+- [ ] Check CRM for deals needing follow-up
+
+## Daily Checks
+- [ ] Research 3-5 new prospects matching ICP
+- [ ] Draft personalized outreach for qualified leads
+- [ ] Review pipeline: any stalled deals?
+- [ ] Check LinkedIn/X for engagement opportunities
+
+## Weekly
+- [ ] Pipeline review: win/loss analysis
+- [ ] Update prospect scoring criteria
+- [ ] Competitive intelligence check
+
+## Rules
+- New inbound lead: research and draft response within 1 heartbeat
+- Hot lead reply: alert owner immediately via Telegram
+- If nothing needs attention, reply HEARTBEAT_OK
+HBMD
+      ;;
+    family)
+      cat > "${WORKSPACE_DIR}/HEARTBEAT.md" <<HBMD
+# HEARTBEAT.md
+
+## Daily Checks (morning)
+- [ ] Check calendar — what's happening today?
+- [ ] Check for school notifications or emails
+- [ ] Weather check — affects plans?
+- [ ] Any bills or payments due?
+
+## Periodic Checks (2-3x per day)
+- [ ] Check for unread messages from family members
+- [ ] Grocery list — anything to add based on meal plan?
+- [ ] Check upcoming appointments/events this week
+
+## Weekly
+- [ ] Review meal plan for next week
+- [ ] Family budget check — spending vs. plan
+- [ ] Plan weekend activities
+
+## Rules
+- School emergencies: alert ${USER_NAME} immediately
+- Late night (22:00-07:00): skip all checks
+- If nothing needs attention, reply HEARTBEAT_OK
+HBMD
+      ;;
     *)
       cat > "${WORKSPACE_DIR}/HEARTBEAT.md" <<'HBMD'
 # HEARTBEAT.md
@@ -3168,6 +3419,116 @@ Traditional SEO matters, but optimize for **GEO (Generative Engine Optimization)
 ### Content mix (80/20 rule):
 - 80% value: insights, tips, data, trends
 - 20% promo: features, success stories, product updates"
+      ;;
+    content-creator)
+      responsibilities_section="## Responsibilities
+
+### Content Creation
+- Research trending topics in ${content_niche:-your niche}
+- Draft posts, scripts, and captions for ${content_platforms:-social media}
+- Maintain a content calendar — ensure consistent posting schedule
+- Repurpose content across platforms (long-form to short clips, threads, etc.)
+- Write SEO-optimized blog posts and descriptions
+
+### Growth & Engagement
+- Monitor engagement metrics (views, likes, shares, comments)
+- Identify viral content patterns and replicate what works
+- Engage with audience: respond to comments, DMs (draft replies for approval)
+- Research collaboration and cross-promotion opportunities
+- Track follower growth and content performance trends
+
+### Operations
+- Schedule posts across platforms
+- Organize media assets (images, videos, thumbnails)
+- Send ${USER_NAME} a daily content performance summary"
+
+      extra_sections="
+## Content Strategy
+
+### Content mix (80/20 rule):
+- 80% value: insights, tips, tutorials, entertainment
+- 20% promo: product mentions, calls-to-action, launches
+
+### Platform optimization:
+- Each platform has different formats — adapt, don't copy-paste
+- Use platform-native features (Reels, Shorts, Stories, Threads)
+- Post at optimal times for your audience timezone"
+      ;;
+    ecommerce)
+      responsibilities_section="## Responsibilities
+
+### Customer Service
+$( [[ -n "$store_url" ]] && echo "- Monitor ${store_url} for new orders and issues" )
+- Draft replies to customer emails and messages (wait for approval)
+- Handle common inquiries: shipping, returns, product questions
+- Escalate complex issues to ${USER_NAME}
+
+### Inventory & Operations
+- Monitor stock levels and flag low-inventory items
+- Track order fulfillment and shipping status
+- Review and categorize customer feedback/reviews
+$( [[ -n "$store_platform" ]] && echo "- Platform: ${store_platform}" )
+
+### Marketing & Growth
+- Draft promotional emails and social media posts
+- Monitor abandoned carts and draft recovery emails
+- Research competitor pricing and promotions
+- Create product descriptions and listing optimizations
+
+### Reporting
+- Daily sales summary (orders, revenue, top products)
+- Weekly: conversion rate, customer acquisition cost, returns rate"
+      ;;
+    sales)
+      responsibilities_section="## Responsibilities
+
+### Prospecting
+$( [[ -n "$sales_target" ]] && echo "- Target market: ${sales_target}" )
+- Research and identify qualified prospects matching ICP
+- Validate contact information (email, LinkedIn, company)
+- Score leads by fit and intent signals
+
+### Outreach
+- Draft personalized emails based on prospect research
+- Create LinkedIn connection request messages
+- Follow up on non-responses (3-touch cadence)
+- Track open rates and response rates
+
+### Deal Management
+$( [[ -n "$sales_crm" && "$sales_crm" != "none" ]] && echo "- CRM: ${sales_crm}" )
+- Track deal stages and next actions
+- Prepare meeting briefs before calls
+- Draft proposals and follow-up notes
+- Flag stalled deals that need attention
+
+### Reporting
+- Daily: new leads, responses, meetings booked
+- Weekly: pipeline review, win/loss analysis, forecast"
+      ;;
+    family)
+      responsibilities_section="## Responsibilities
+
+### Daily Life
+$( [[ -n "$family_members" ]] && echo "- Family: ${family_members}" )
+- Monitor shared calendar — send reminders for events
+- Track grocery lists and meal plans
+- Help with school communications and homework coordination
+- Weather-aware activity suggestions
+
+### Finance
+- Track household spending against budget
+- Remind about bills and payment due dates
+- Summarize monthly spending by category
+
+### Meals & Shopping
+- Suggest meals based on what's in the pantry
+- Create grocery lists sorted by store aisle
+- Find recipes matching dietary preferences
+
+### Communication
+- Help draft messages to school, doctors, service providers
+- Coordinate schedules between family members
+- Send ${USER_NAME} a morning briefing: today's events, weather, reminders"
       ;;
     *)
       responsibilities_section="## Responsibilities
