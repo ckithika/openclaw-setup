@@ -1994,14 +1994,17 @@ setup_github_backup() {
 
   if ask_yn "Do you have an existing brain repo on GitHub?" "n"; then
     GITHUB_BRAIN_EXISTS=true
-    GITHUB_BRAIN_REPO=$(ask_input "GitHub repo URL" "")
 
-    if [[ -n "$GITHUB_BRAIN_REPO" ]]; then
-      info "Cloning into $VAULT_PATH..."
-      if [[ -d "$VAULT_PATH/.git" ]]; then
-        success "Vault already has git — pulling latest"
-        git -C "$VAULT_PATH" pull --rebase --autostash 2>/dev/null || warn "Pull failed — check manually"
-      else
+    if [[ -d "$VAULT_PATH/.git" ]]; then
+      # Vault already has git — just pull latest, don't reclone
+      GITHUB_BRAIN_REPO=$(git -C "$VAULT_PATH" remote get-url origin 2>/dev/null || echo "")
+      success "Vault already synced to: ${GITHUB_BRAIN_REPO:-unknown remote}"
+      git -C "$VAULT_PATH" pull --rebase --autostash 2>/dev/null || warn "Pull failed — check manually"
+      info "Skipping git init, .gitignore, git-crypt, and repo creation — using existing setup"
+    else
+      GITHUB_BRAIN_REPO=$(ask_input "GitHub repo URL" "")
+      if [[ -n "$GITHUB_BRAIN_REPO" ]]; then
+        info "Cloning into $VAULT_PATH..."
         git clone "$GITHUB_BRAIN_REPO" "$VAULT_PATH" 2>/dev/null && success "Cloned successfully" || warn "Clone failed — check URL and auth"
       fi
     fi
