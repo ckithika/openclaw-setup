@@ -209,26 +209,14 @@ teardown() {
 # ── Config Generation (Integration) ─────────────────────────────────────────
 
 @test "native minimal generates valid JSON" {
-  printf '%s\n' \
-    "1" "testinstance" \
-    "8" "n" \
-    "n" "n" "n" "n" "n" "n" \
-    "1" "1" "n" "n" \
-    "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
+  HOME="$TEST_DIR" bash "$SCRIPT" --ci-mode >/dev/null 2>&1 || true
 
   [ -f "$TEST_DIR/.openclaw/openclaw.json" ]
   python3 -c "import json; json.load(open('$TEST_DIR/.openclaw/openclaw.json'))"
 }
 
 @test "native config has correct model" {
-  printf '%s\n' \
-    "1" "testinstance" \
-    "8" "n" \
-    "n" "n" "n" "n" "n" "n" \
-    "1" "1" "n" "n" \
-    "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
+  HOME="$TEST_DIR" bash "$SCRIPT" --ci-mode >/dev/null 2>&1 || true
 
   local model
   model=$(python3 -c "import json; c=json.load(open('$TEST_DIR/.openclaw/openclaw.json')); print(c['agents']['defaults']['model'])" 2>/dev/null)
