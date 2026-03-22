@@ -1,6 +1,37 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # OpenClaw Unified Setup Script v3
+
+# Guard: require interactive terminal (prevents 100% CPU loops when run headless)
+if [[ ! -t 0 ]]; then
+  echo "ERROR: This script requires an interactive terminal."
+  echo "Run from terminal: ./setup.sh"
+  exit 1
+fi
+
+# Guard: prevent concurrent runs with PID file
+PIDFILE="/tmp/openclaw-setup.pid"
+if [[ -f "$PIDFILE" ]]; then
+  OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+  if ps -p "$OLD_PID" > /dev/null 2>&1; then
+    echo "ERROR: Setup already running (PID: $OLD_PID)"
+    echo "Kill it first: kill $OLD_PID"
+    exit 1
+  fi
+fi
+echo $$ > "$PIDFILE"
+
+# Cleanup PID on exit
+trap 'rm -f "$PIDFILE"' EXIT
+
+# [CONDITIONAL TRIGGER] Auto-run setup if OpenClaw not healthy
+if [[ "$1" == "--if-needed" ]]; then
+  if openclaw gateway status 2>/dev/null | grep -q "Running"; then
+    echo "✅ OpenClaw already healthy. Skipping setup."
+    exit 0
+  fi
+  echo "⚠️ OpenClaw not running. Starting setup..."
+fi
 # Works for both native (macOS) and Docker instance deployments
 # M4 Mac Mini optimized | Cloud models preferred
 #
@@ -170,14 +201,16 @@ ask_yn() {
 ask_input() {
   local prompt="$1" default="${2:-}"
   local hint=""; [[ -n "$default" ]] && hint=" (default: $default)"
-  local _eof=false
-  while true; do
+  local attempts=0 max_attempts=3
+  while [[ $attempts -lt $max_attempts ]]; do
+    attempts=$((attempts + 1))
     echo -ne "${YELLOW}?${NC} ${prompt}${hint}: " >&2
-    read -r answer || _eof=true
+    read -r answer || true
     answer="${answer:-$default}"
-    if [[ "$_eof" == "true" && -z "$answer" ]]; then
-      echo "$default"
-      return
+    if [[ -z "$answer" ]]; then
+      [[ -n "$default" ]] && { echo "$default"; return; }
+      [[ $attempts -ge $max_attempts ]] && { echo "ERROR: No input after $max_attempts attempts" >&2; exit 1; }
+      continue
     fi
     if validate_input "$answer" "$prompt"; then
       echo "$answer"
@@ -185,6 +218,8 @@ ask_input() {
     fi
     echo -e "  ${RED}Invalid input, try again${NC}" >&2
   done
+  echo "ERROR: Max attempts exceeded for $prompt" >&2
+  exit 1
 }
 
 ask_name() {
@@ -4474,6 +4509,11 @@ main() {
   run_health_check
 
   print_summary
+  
+  # Mark setup as complete
+  mkdir -p "$HOME/.openclaw"
+  date > "$HOME/.openclaw/.setup-complete"
+  echo "Setup completed: $(cat "$HOME/.openclaw/.setup-complete")"
 }
 
 main "$@"
