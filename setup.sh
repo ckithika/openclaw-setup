@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # OpenClaw Unified Setup Script v3
+set -euo pipefail
+
+SCRIPT_VERSION="3.0.0"
+
+# ── CLI Flags (process BEFORE terminal guard for CI compatibility) ───────────
+for arg in "$@"; do
+  case "$arg" in
+    --version)     echo "openclaw-setup v${SCRIPT_VERSION}"; exit 0 ;;
+    --help|-h)
+      echo "Usage: ./setup.sh [OPTIONS]"
+      echo ""
+      echo "Options:"
+      echo "  --reconfigure  Re-configure an existing OpenClaw instance"
+      echo "  --version      Show script version"
+      echo "  --help         Show this help"
+      echo "  --if-needed    Run only if OpenClaw not healthy"
+      exit 0
+      ;;
+    --reconfigure) shift ;;  # handled later
+    --if-needed) shift ;;   # handled later
+    --*)         echo "Unknown option: $arg (use --help for usage)" >&2; exit 1 ;;
+  esac
+done
 
 # Guard: require interactive terminal (prevents 100% CPU loops when run headless)
 # Bypassed when piped input is intentional (tests, automation)
@@ -57,28 +80,16 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-SCRIPT_VERSION="3.0.0"
-RECONFIGURE=false
+# ────────────────
 EXISTING_CONFIG=""
+RECONFIGURE=false
 
-# ── Parse CLI args ───────────────────────────────────────────────────────────
+# ── Parse CLI args (RECONFIGURE only --version/--help handled at top) ─────────
 for arg in "$@"; do
   case "$arg" in
     --reconfigure) RECONFIGURE=true ;;
-    --version)     echo "openclaw-setup v${SCRIPT_VERSION}"; exit 0 ;;
-    --help|-h)
-      echo "Usage: setup.sh [OPTIONS]"
-      echo ""
-      echo "Options:"
-      echo "  --reconfigure  Re-configure an existing OpenClaw instance"
-      echo "  --version      Show script version"
-      echo "  --help         Show this help"
-      exit 0
-      ;;
-    *)
-      echo "Unknown option: $arg (use --help for usage)"
-      exit 1
-      ;;
+    --version|--help|-h) ;;  # Handled at top, skip here
+    --*)  ;;  # Other flags handled at top
   esac
 done
 
