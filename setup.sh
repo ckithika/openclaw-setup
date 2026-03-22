@@ -1624,16 +1624,24 @@ setup_obsidian_vault() {
 
   success "Vault path: $VAULT_PATH"
 
-  # Create folder structure
+  # Create folder structure (mkdir -p is safe for existing folders)
   local folders=("claude-web" "claude-code" "claude-memory" "meetings" "emails" "memory" "daily" "projects")
   for folder in "${folders[@]}"; do
     mkdir -p "${VAULT_PATH}/${folder}"
   done
-  success "Vault folder structure created"
+  success "Vault folder structure ensured"
 
-  # Point OpenClaw workspace at vault
-  WORKSPACE_DIR="$VAULT_PATH"
-  info "OpenClaw workspace will point to: $VAULT_PATH"
+  # For existing vaults, don't overwrite workspace files (SOUL.md, IDENTITY.md, etc.)
+  if [[ "$VAULT_IS_NEW" == "false" ]]; then
+    info "Existing vault detected — workspace files (SOUL.md, IDENTITY.md, etc.) will NOT be overwritten"
+    info "The new agent will share the vault but keep its own workspace at: $WORKSPACE_DIR"
+    # Don't reassign WORKSPACE_DIR — keep the instance's own workspace
+    # The vault is mounted separately via volume
+  else
+    # New vault: point workspace at vault
+    WORKSPACE_DIR="$VAULT_PATH"
+    info "OpenClaw workspace will point to: $VAULT_PATH"
+  fi
 }
 
 setup_tag_taxonomy() {
