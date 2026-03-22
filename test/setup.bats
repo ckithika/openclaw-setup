@@ -211,11 +211,11 @@ teardown() {
 @test "native minimal generates valid JSON" {
   printf '%s\n' \
     "1" "testinstance" \
-    "4" "n" \
+    "8" "n" \
     "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   [ -f "$TEST_DIR/.openclaw/openclaw.json" ]
   python3 -c "import json; json.load(open('$TEST_DIR/.openclaw/openclaw.json'))"
@@ -224,11 +224,11 @@ teardown() {
 @test "native config has correct model" {
   printf '%s\n' \
     "1" "testinstance" \
-    "4" "n" \
+    "8" "n" \
     "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   local model
   model=$(python3 -c "import json; c=json.load(open('$TEST_DIR/.openclaw/openclaw.json')); print(c['agents']['defaults']['model'])" 2>/dev/null)
@@ -238,11 +238,11 @@ teardown() {
 @test "native config has no unsupported session keys" {
   printf '%s\n' \
     "1" "testinstance" \
-    "4" "n" \
+    "8" "n" \
     "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   # Ensure unsupported keys (contextPruning, memoryFlush, compaction) are not present
   local bad_keys
@@ -259,11 +259,11 @@ print(','.join(bad) if bad else 'clean')
 @test "credentials directory has chmod 700" {
   printf '%s\n' \
     "1" "testinstance" \
-    "4" "n" \
+    "8" "n" \
     "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   local perms
   perms=$(stat -f "%Lp" "$TEST_DIR/.openclaw/credentials" 2>/dev/null || stat -c "%a" "$TEST_DIR/.openclaw/credentials" 2>/dev/null)
@@ -273,12 +273,12 @@ print(','.join(bad) if bad else 'clean')
 @test "workspace files are created" {
   printf '%s\n' \
     "1" "testinstance" \
-    "4" "n" \
+    "8" "n" \
     "n" "n" "n" "n" "n" "n" \
     "1" "1" "n" "n" \
     "n" "n" "n" "n" \
     "" "" "" "" "" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   # Check persona files exist
   local ws="$TEST_DIR/.openclaw/workspace"
@@ -302,7 +302,7 @@ print(','.join(bad) if bad else 'clean')
     "1" "1" "n" "n" \
     "n" "$TEST_DIR/testvault" \
     "n" "n" "n" "n" "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   # Check if vault folders were created (may fail due to input alignment, that's ok)
   if [ -d "$TEST_DIR/testvault" ]; then
@@ -325,7 +325,7 @@ print(','.join(bad) if bad else 'clean')
     "n" "n" "n" "n" "n" "n" \
     "n" "test-docker" \
     "n" "n" "n" "n" "n" "n" "n" "n" \
-  | HOME="$TEST_DIR" bash "$SCRIPT" >/dev/null 2>&1 || true
+  | HOME="$TEST_DIR" OPENCLAW_SETUP_ALLOW_PIPE=1 bash "$SCRIPT" >/dev/null 2>&1 || true
 
   # Check if docker-compose was generated (path depends on input alignment)
   local found=false

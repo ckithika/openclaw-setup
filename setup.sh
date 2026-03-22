@@ -3,9 +3,11 @@
 # OpenClaw Unified Setup Script v3
 
 # Guard: require interactive terminal (prevents 100% CPU loops when run headless)
-if [[ ! -t 0 ]]; then
+# Bypassed when piped input is intentional (tests, automation)
+if [[ ! -t 0 && "${OPENCLAW_SETUP_ALLOW_PIPE:-}" != "1" ]]; then
   echo "ERROR: This script requires an interactive terminal."
   echo "Run from terminal: ./setup.sh"
+  echo "Or set OPENCLAW_SETUP_ALLOW_PIPE=1 to allow piped input."
   exit 1
 fi
 
