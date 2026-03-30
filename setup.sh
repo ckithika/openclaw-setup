@@ -53,7 +53,7 @@ echo $$ > "$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT
 
 # [CONDITIONAL TRIGGER] Auto-run setup if OpenClaw not healthy
-if [[ "$1" == "--if-needed" ]]; then
+if [[ "${1:-}" == "--if-needed" ]]; then
   if openclaw gateway status 2>/dev/null | grep -q "Running"; then
     echo "✅ OpenClaw already healthy. Skipping setup."
     exit 0
